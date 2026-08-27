@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>설비·에너지 통합 관리 | Facility AI</title>
+<meta name="description" content="지금 챙겨야 할 것부터 봅니다. 기한이 임박한 검사·교체와 올해 남은 비용.">
+<link rel="stylesheet" href="css/style.css">
+<!-- === HD:META:BEGIN (자동 생성 — scripts 로 다시 굽습니다) === -->
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="canonical" href="https://aebonlee.github.io/hd-project15/">
+<meta name="robots" content="index,follow">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="HD 생성형 AI 업무자동화 전문가과정">
+<meta property="og:url" content="https://aebonlee.github.io/hd-project15/">
+<meta property="og:title" content="Facility AI — 설비·에너지 통합 관리 — HD 생성형 AI 업무자동화 전문가과정">
+<meta property="og:description" content="캠퍼스 유틸리티 설비 대장, 법정검사·소모품 교체 시기 계산, 차년도 비용 예측, 에너지 사용량 분석을 한 곳에서.">
+<meta property="og:image" content="https://aebonlee.github.io/hd-project15/og-index.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale" content="ko_KR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Facility AI — 설비·에너지 통합 관리 — HD 생성형 AI 업무자동화 전문가과정">
+<meta name="twitter:description" content="캠퍼스 유틸리티 설비 대장, 법정검사·소모품 교체 시기 계산, 차년도 비용 예측, 에너지 사용량 분석을 한 곳에서.">
+<meta name="twitter:image" content="https://aebonlee.github.io/hd-project15/og-index.png">
+<!-- === HD:META:END === -->
+</head>
+<body>
+
+<nav class="topnav"><div class="topnav-inner">
+  <a class="topnav-brand" href="index.html">Facility AI<small>유틸리티 설비·에너지</small></a>
+  <ul class="topnav-links">
+    <li><a href="index.html" class="active">개요</a></li>
+    <li><a href="equipment.html">설비</a></li>
+    <li><a href="alerts.html">알림</a></li>
+    <li><a href="history.html">이력</a></li>
+    <li><a href="cost.html">비용</a></li>
+    <li><a href="energy.html">에너지</a></li>
+    <li><a href="map.html">조감도</a></li>
+  </ul>
+</div></nav>
+
+<header class="hero"><div class="wrap">
+  <div class="eyebrow">HD 생성형 AI 업무자동화 전문가과정 · 기획 지준경</div>
+  <h1>설비·에너지 통합 관리</h1>
+  <p>지금 챙겨야 할 것부터 봅니다. 기한이 임박한 검사·교체와 올해 남은 비용.</p>
+</div></header>
+
+<main><div class="wrap">
+<div id="empty-hint" class="note" hidden>
+  아직 등록된 설비가 없습니다. <a href="equipment.html">설비 화면</a>에서 먼저 등록하거나,
+  아래 <b>예시 자료 넣기</b>로 어떻게 쓰는지 살펴보세요.
+  <div class="btnrow"><button class="btn" id="seed">예시 자료 넣기</button></div>
+</div>
+
+<h2>지금 챙겨야 할 것</h2>
+<div class="stats" id="summary"></div>
+
+<div class="card">
+  <h3 style="font-size:16px;margin-bottom:4px">기한이 가까운 순서</h3>
+  <p class="sub">법정검사는 30일 전부터, 소모품 교체는 14일 전부터 알립니다.</p>
+  <div class="tablewrap" style="max-height:none"><table id="due">
+    <thead><tr><th>구분</th><th>설비</th><th>항목</th><th>기한</th><th>남은 일수</th><th>상태</th></tr></thead>
+    <tbody></tbody></table></div>
+</div>
+
+<div class="card">
+  <h3 style="font-size:16px;margin-bottom:4px">확인이 필요한 것</h3>
+  <p class="sub">법령을 오래 확인하지 않았거나, 법령을 대조할 값이 빠진 설비입니다.</p>
+  <div id="review"></div>
+</div>
+
+<h2>이 도구가 하는 일과 하지 않는 일</h2>
+<div class="note">
+  <p style="margin:0 0 8px"><b>합니다</b> — 설비 대장, 검사·교체 시기 계산, 이력과 금액 기록,
+     차년도 비용 예측, 고지서 PDF에서 사용량 뽑기, 건물별 설비 조회.</p>
+  <p style="margin:0"><b>하지 않습니다</b> — 법령 자동 조회와 메일 자동 발송.
+     둘 다 서버와 인증키가 필요하고 사내 폐쇄망에서는 나갈 수 없습니다.
+     대신 <b>확인해야 할 것을 목록으로 뽑아</b> 주고 법령 검색 링크를 겁니다.</p>
+</div>
+</div></main>
+
+<footer><div class="wrap">
+  <p>Facility AI — 캠퍼스 유틸리티 설비·에너지 통합 관리.
+     자료는 <b>이 브라우저에만</b> 저장됩니다. 다른 PC 로 옮기려면 설비 화면의 내보내기를 쓰세요.</p>
+  <p class="sub">문의 dreamitbiz@naver.com · 010-2634-2426 · 카카오톡 aebon</p>
+</div></footer>
+
+<script src="lib/xlsx.full.min.js"></script>
+<script src="js/store.js"></script>
+<script src="js/schedule.js"></script>
+<script src="js/law.js"></script>
+<script src="js/energy.js"></script>
+<script src="js/app.js"></script>
+
+</body>
+</html>

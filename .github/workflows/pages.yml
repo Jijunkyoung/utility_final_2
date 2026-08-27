@@ -1,0 +1,21 @@
+name: Deploy to GitHub Pages
+on:
+  push: { branches: [main] }
+  workflow_dispatch:
+permissions: { contents: read, pages: write, id-token: write }
+concurrency: { group: pages, cancel-in-progress: false }
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      # 저장소 전체를 그대로 올린다. 파일을 골라 복사하면 새 자산을 넣을 때마다
+      # 여기에 적는 것을 잊어 404 가 난다(hd-08 에서 실제로 겪었다).
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: '.' }
+      - id: deployment
+        uses: actions/deploy-pages@v4

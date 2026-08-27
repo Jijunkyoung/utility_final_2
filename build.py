@@ -1,0 +1,380 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+페이지를 굽는다.  실행:  python3 build.py
+
+왜 생성기를 두나
+  메뉴가 일곱 개다. 페이지마다 손으로 적으면 하나를 더할 때 일곱 군데를 고쳐야 하고,
+  꼭 한 곳을 빠뜨린다. 메뉴는 여기 한 곳에만 적는다.
+
+⚠ 본문은 반드시 `<main>` 안에 넣는다.
+  위아래 여백이 `main{padding:34px 0 60px}` 한 곳에만 있어서,
+  `<div>` 로 바꾸면 히어로와 첫 제목이 붙어 버린다.
+"""
+import io
+import os
+import re
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+
+SITE = "Facility AI"
+DESC = "캠퍼스 유틸리티 설비와 에너지 사용량을 한 곳에서 관리합니다."
+BASE = "https://aebonlee.github.io/hd-project15/"
+
+# (파일, 메뉴이름, 제목, 설명)
+MENU = [
+    ("index.html",     "개요",   "설비·에너지 통합 관리",
+     "지금 챙겨야 할 것부터 봅니다. 기한이 임박한 검사·교체와 올해 남은 비용."),
+    ("equipment.html", "설비",   "설비 등록·목록",
+     "설비 사양과 담당자, 관련 법령을 한 건씩 등록합니다. 여기 적은 값이 나머지 화면의 근거가 됩니다."),
+    ("alerts.html",    "알림",   "검사·교체 알림",
+     "법정검사와 소모품 교체 시기를 계산해 임박한 순서로 보여 줍니다."),
+    ("history.html",   "이력",   "이력 관리",
+     "교체·고장 AS·법정검사를 마칠 때마다 날짜와 금액을 남깁니다. 이 기록이 비용 예측의 근거입니다."),
+    ("cost.html",      "비용",   "차년도 비용 예측",
+     "등록된 주기와 단가로 내년에 돌아오는 항목과 금액을 셉니다."),
+    ("energy.html",    "에너지", "에너지 사용량 분석",
+     "월별 고지서 PDF에서 사용량을 뽑아 그래프로 보고 엑셀로 내보냅니다."),
+    ("map.html",       "조감도", "캠퍼스 조감도",
+     "건물을 누르면 그 건물에 설치된 설비와 사양을 봅니다."),
+]
+
+HEAD = """<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{title} | {site}</title>
+<meta name="description" content="{desc}">
+<link rel="stylesheet" href="css/style.css">
+<!-- === HD:META:BEGIN (자동 생성 — scripts 로 다시 굽습니다) === -->
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="canonical" href="{base}{canon}">
+<meta name="robots" content="index,follow">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="{site}">
+<meta property="og:url" content="{base}{canon}">
+<meta property="og:title" content="{title} — {site}">
+<meta property="og:description" content="{desc}">
+<meta property="og:image" content="{base}{og}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale" content="ko_KR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{title} — {site}">
+<meta name="twitter:description" content="{desc}">
+<meta name="twitter:image" content="{base}{og}">
+<!-- === HD:META:END === -->
+</head>
+<body>
+
+<nav class="topnav"><div class="topnav-inner">
+  <a class="topnav-brand" href="index.html">Facility AI<small>유틸리티 설비·에너지</small></a>
+  <ul class="topnav-links">
+{links}
+  </ul>
+</div></nav>
+
+<header class="hero"><div class="wrap">
+  <div class="eyebrow">HD 생성형 AI 업무자동화 전문가과정 · 기획 지준경</div>
+  <h1>{title}</h1>
+  <p>{desc}</p>
+</div></header>
+
+<main><div class="wrap">
+"""
+
+FOOT = """</div></main>
+
+<footer><div class="wrap">
+  <p>{site} — 캠퍼스 유틸리티 설비·에너지 통합 관리.
+     자료는 <b>이 브라우저에만</b> 저장됩니다. 다른 PC 로 옮기려면 설비 화면의 내보내기를 쓰세요.</p>
+  <p class="sub">문의 dreamitbiz@naver.com · 010-2634-2426 · 카카오톡 aebon</p>
+</div></footer>
+
+<script src="lib/xlsx.full.min.js"></script>
+<script src="js/store.js"></script>
+<script src="js/schedule.js"></script>
+<script src="js/law.js"></script>
+<script src="js/energy.js"></script>
+<script src="js/app.js"></script>
+{extra}
+</body>
+</html>
+"""
+
+
+def build(fname, body, extra=""):
+    idx = [m for m in MENU if m[0] == fname][0]
+    _, _, title, desc = idx
+    links = "\n".join(
+        '    <li><a href="{}"{}>{}</a></li>'.format(
+            f, ' class="active"' if f == fname else "", label)
+        for f, label, _, _ in MENU)
+    canon = "" if fname == "index.html" else fname
+    og = "og-index.png" if fname == "index.html" else "og-%s.png" % fname.replace(".html", "")
+    html = (HEAD.format(title=title, desc=desc, site=SITE, base=BASE,
+                        canon=canon, og=og, links=links)
+            + body.strip() + "\n"
+            + FOOT.format(site=SITE, extra=extra))
+    p = os.path.join(HERE, fname)
+    io.open(p, "w", encoding="utf-8").write(html)
+    return fname
+
+
+PAGES = {}
+
+# ─────────────────────────────────────────────────────────── 개요
+PAGES["index.html"] = """
+<div id="empty-hint" class="note" hidden>
+  아직 등록된 설비가 없습니다. <a href="equipment.html">설비 화면</a>에서 먼저 등록하거나,
+  아래 <b>예시 자료 넣기</b>로 어떻게 쓰는지 살펴보세요.
+  <div class="btnrow"><button class="btn" id="seed">예시 자료 넣기</button></div>
+</div>
+
+<h2>지금 챙겨야 할 것</h2>
+<div class="stats" id="summary"></div>
+
+<div class="card">
+  <h3 style="font-size:16px;margin-bottom:4px">기한이 가까운 순서</h3>
+  <p class="sub">법정검사는 30일 전부터, 소모품 교체는 14일 전부터 알립니다.</p>
+  <div class="tablewrap" style="max-height:none"><table id="due">
+    <thead><tr><th>구분</th><th>설비</th><th>항목</th><th>기한</th><th>남은 일수</th><th>상태</th></tr></thead>
+    <tbody></tbody></table></div>
+</div>
+
+<div class="card">
+  <h3 style="font-size:16px;margin-bottom:4px">확인이 필요한 것</h3>
+  <p class="sub">법령을 오래 확인하지 않았거나, 법령을 대조할 값이 빠진 설비입니다.</p>
+  <div id="review"></div>
+</div>
+
+<h2>이 도구가 하는 일과 하지 않는 일</h2>
+<div class="note">
+  <p style="margin:0 0 8px"><b>합니다</b> — 설비 대장, 검사·교체 시기 계산, 이력과 금액 기록,
+     차년도 비용 예측, 고지서 PDF에서 사용량 뽑기, 건물별 설비 조회.</p>
+  <p style="margin:0"><b>하지 않습니다</b> — 법령 자동 조회와 메일 자동 발송.
+     둘 다 서버와 인증키가 필요하고 사내 폐쇄망에서는 나갈 수 없습니다.
+     대신 <b>확인해야 할 것을 목록으로 뽑아</b> 주고 법령 검색 링크를 겁니다.</p>
+</div>
+"""
+
+# ─────────────────────────────────────────────────────────── 설비
+PAGES["equipment.html"] = """
+<div class="card">
+  <h3 style="font-size:16px;margin-bottom:10px">설비 등록</h3>
+  <form id="eq-form" class="grid-form">
+    <label>설비번호 <input name="code" required placeholder="U-EL-01"></label>
+    <label>설비명 <input name="name" required placeholder="본관 승객용 승강기 1호기"></label>
+    <label>종류
+      <select name="kind" id="kind"></select>
+    </label>
+    <label>건물 <input name="building" placeholder="본관" list="bldg-list"><datalist id="bldg-list"></datalist></label>
+    <label>설치위치 <input name="place" placeholder="지하 1층 기계실"></label>
+    <label>사양 <input name="spec" placeholder="15인승 / 1.0 m/s / 11.5 kW"></label>
+    <label>유량 <input name="flow" placeholder="—"></label>
+    <label>압력 <input name="pressure" placeholder="—"></label>
+    <label>소모전력 <input name="power" placeholder="11.5 kW"></label>
+    <label>냉난방용량 <input name="hvac" placeholder="—"></label>
+    <label>법정선임관리자 <input name="legalMgr" placeholder="이름 / 연락처"></label>
+    <label>유지관리자 <input name="mgr" placeholder="이름 / 연락처"></label>
+    <label>유지관리자 메일 <input name="mgrEmail" type="email" placeholder="name@company.com"></label>
+    <label>마지막 법정검사 <input name="lastInspect" type="date"></label>
+    <label>검사 주기(개월) <input name="cycleMonths" type="number" min="1" step="1" placeholder="12"></label>
+    <label>검사 비용(원) <input name="inspectCost" type="number" min="0" step="1000" placeholder="—"></label>
+    <label>법령 확인일 <input name="lawCheckedAt" type="date"></label>
+    <label style="grid-column:1/-1">매뉴얼 위치 <input name="manual" placeholder="사내 공유폴더 경로 또는 문서번호"></label>
+  </form>
+  <div id="law-hint"></div>
+  <div class="btnrow">
+    <button class="btn primary" id="eq-save">등록</button>
+    <button class="btn" id="eq-clear" type="button">입력 지우기</button>
+  </div>
+</div>
+
+<h2>설비 목록 <span class="sub" id="eq-count"></span></h2>
+<div class="btnrow" style="margin-top:0;margin-bottom:12px">
+  <button class="btn" id="export">내보내기 (JSON)</button>
+  <label class="btn" for="import-file">가져오기</label>
+  <input type="file" id="import-file" accept=".json">
+  <button class="btn" id="export-xlsx">엑셀로 내보내기</button>
+</div>
+<div class="tablewrap"><table id="eq-table">
+  <thead><tr><th></th><th>설비번호</th><th>설비명</th><th>종류</th><th>건물</th><th>위치</th>
+    <th>사양</th><th>유지관리자</th><th>마지막 검사</th><th>주기</th><th>법령 확인일</th></tr></thead>
+  <tbody></tbody></table></div>
+"""
+
+# ─────────────────────────────────────────────────────────── 알림
+PAGES["alerts.html"] = """
+<div class="card">
+  <div class="btnrow" style="margin-top:0">
+    <label style="display:flex;align-items:center;gap:8px">기준일
+      <input type="date" id="today" style="min-height:38px"></label>
+    <label style="display:flex;align-items:center;gap:8px">검사 알림
+      <input type="number" id="lead-inspect" value="30" min="1" style="width:80px;min-height:38px">일 전</label>
+    <label style="display:flex;align-items:center;gap:8px">교체 알림
+      <input type="number" id="lead-replace" value="14" min="1" style="width:80px;min-height:38px">일 전</label>
+  </div>
+</div>
+
+<div class="stats" id="alert-stats"></div>
+
+<h2>법정검사</h2>
+<div class="tablewrap"><table id="insp">
+  <thead><tr><th>설비번호</th><th>설비명</th><th>종류</th><th>마지막 검사</th><th>주기</th>
+    <th>다음 검사</th><th>남은 일수</th><th>상태</th><th>유지관리자</th></tr></thead>
+  <tbody></tbody></table></div>
+
+<h2>소모품 교체</h2>
+<div class="tablewrap"><table id="cons">
+  <thead><tr><th>설비</th><th>소모품</th><th>마지막 교체</th><th>주기</th>
+    <th>다음 교체</th><th>남은 일수</th><th>상태</th><th>단가</th></tr></thead>
+  <tbody></tbody></table></div>
+
+<div class="note" id="mail-note">
+  <b>메일 발송은 이 도구가 하지 않습니다.</b>
+  자동 발송에는 서버와 메일 계정이 필요하고, 사내 폐쇄망에서는 나갈 수 없습니다.
+  대신 아래 버튼으로 <b>알릴 내용을 만들어</b> 드립니다. 복사해 사내 메일로 보내세요.
+  <div class="btnrow">
+    <button class="btn" id="make-mail">알림 문안 만들기</button>
+    <button class="btn" id="copy-mail" disabled>복사</button>
+  </div>
+  <textarea id="mail-body" rows="10" hidden
+    style="width:100%;margin-top:12px;font-family:ui-monospace,monospace;font-size:13px;
+           padding:12px;border:1px solid var(--line);border-radius:8px"></textarea>
+</div>
+"""
+
+# ─────────────────────────────────────────────────────────── 이력
+PAGES["history.html"] = """
+<div class="card">
+  <h3 style="font-size:16px;margin-bottom:10px">이력 추가</h3>
+  <form id="h-form" class="grid-form">
+    <label>설비 <select name="equipmentId" id="h-eq" required></select></label>
+    <label>구분
+      <select name="kind">
+        <option>법정검사</option><option>소모품 교체</option><option>고장 AS</option><option>기타</option>
+      </select></label>
+    <label>일자 <input name="date" type="date" required></label>
+    <label>금액(원) <input name="cost" type="number" min="0" step="1000" placeholder="모르면 비워 둡니다"></label>
+    <label>업체 <input name="vendor"></label>
+    <label style="grid-column:1/-1">내용 <input name="memo" placeholder="필터 4개 교체 / 정기검사 합격"></label>
+  </form>
+  <div class="note" style="margin-bottom:0">
+    <b>금액을 모르면 비워 두세요.</b> 0 을 넣으면 비용 예측에서 <b>0 원짜리 항목</b>으로 잡혀
+    예산이 실제보다 적게 나옵니다. 비워 두면 “미상”으로 따로 세어 눈에 보입니다.
+  </div>
+  <div class="btnrow">
+    <button class="btn primary" id="h-save">추가</button>
+    <button class="btn" id="h-apply" title="법정검사·소모품 교체 이력을 설비의 마지막 일자에 반영합니다">
+      마지막 일자에 반영</button>
+  </div>
+</div>
+
+<h2>이력 <span class="sub" id="h-count"></span></h2>
+<div class="tablewrap"><table id="h-table">
+  <thead><tr><th></th><th>일자</th><th>설비</th><th>구분</th><th>내용</th><th>업체</th><th>금액</th></tr></thead>
+  <tbody></tbody></table></div>
+
+<h2>설비별 누계</h2>
+<div class="tablewrap"><table id="h-sum">
+  <thead><tr><th>설비</th><th>건수</th><th>합계 금액</th><th>금액 미상</th></tr></thead>
+  <tbody></tbody></table></div>
+"""
+
+# ─────────────────────────────────────────────────────────── 비용
+PAGES["cost.html"] = """
+<div class="card">
+  <div class="btnrow" style="margin-top:0">
+    <label style="display:flex;align-items:center;gap:8px">기준 연도
+      <input type="number" id="year" min="2000" max="2100" style="width:110px;min-height:38px"></label>
+    <button class="btn primary" id="calc">계산</button>
+    <button class="btn" id="cost-xlsx">엑셀로 내보내기</button>
+  </div>
+  <p class="sub" style="margin:12px 0 0">
+    그 해에 <b>돌아오는 횟수</b>를 세어 곱합니다. 주기가 6개월이면 한 해에 두 번이므로 두 배입니다.
+  </p>
+</div>
+
+<div class="stats" id="cost-stats"></div>
+
+<h2>항목별</h2>
+<div class="tablewrap"><table id="cost-table">
+  <thead><tr><th>항목</th><th>구분</th><th>횟수</th><th>단가</th><th>합계</th></tr></thead>
+  <tbody></tbody></table></div>
+
+<h2>셀 수 없었던 것</h2>
+<p class="sub">아래 항목은 합계에 넣지 않았습니다. <b>0 원으로 세면 예산이 적게 잡히고 그 사실이 드러나지 않기 때문입니다.</b></p>
+<ul class="filelist" id="cost-unknown"></ul>
+"""
+
+# ─────────────────────────────────────────────────────────── 에너지
+PAGES["energy.html"] = """
+<div class="card">
+  <label class="drop" id="drop" for="file">
+    <b>고지서 PDF 를 끌어다 놓거나 눌러서 고릅니다</b>
+    <span>여러 장을 한 번에 넣어도 됩니다 · PDF · CSV · 엑셀</span>
+  </label>
+  <input type="file" id="file" accept=".pdf,.csv,.xlsx,.xls" multiple>
+  <ul class="filelist" id="files"></ul>
+  <div id="read-note"></div>
+  <div class="btnrow">
+    <button class="btn" id="paste-toggle">글로 붙여넣기</button>
+    <button class="btn" id="energy-xlsx" disabled>엑셀로 내보내기</button>
+    <button class="btn" id="energy-clear">비우기</button>
+  </div>
+  <textarea id="paste" rows="7" hidden placeholder="2026년 1월 전력 사용량 125,400 kWh 요금 18,310,000 원"
+    style="width:100%;margin-top:12px;font-family:ui-monospace,monospace;font-size:13px;
+           padding:12px;border:1px solid var(--line);border-radius:8px"></textarea>
+</div>
+
+<h2>월별 사용량</h2>
+<div id="charts"></div>
+
+<div class="tablewrap"><table id="energy-table">
+  <thead><tr><th>연월</th><th>종류</th><th>사용량</th><th>단위</th><th>전월 대비</th><th>요금</th><th>읽은 줄</th></tr></thead>
+  <tbody></tbody></table></div>
+"""
+
+# ─────────────────────────────────────────────────────────── 조감도
+PAGES["map.html"] = """
+<div class="card">
+  <h3 style="font-size:16px;margin-bottom:6px">건물 배치</h3>
+  <p class="sub">건물을 누르면 그 건물의 설비가 아래에 나옵니다.
+     건물은 설비에 적은 <b>건물</b> 값에서 자동으로 만들어집니다.</p>
+  <div id="campus"></div>
+</div>
+
+<h2 id="picked-title">건물을 고르세요</h2>
+<div class="tablewrap"><table id="picked">
+  <thead><tr><th>설비번호</th><th>설비명</th><th>종류</th><th>위치</th><th>사양</th>
+    <th>소모전력</th><th>유지관리자</th><th>다음 검사</th></tr></thead>
+  <tbody></tbody></table></div>
+
+<div class="note">
+  <b>실제 조감도 그림을 쓰려면</b> 이미지를 <code>img/campus.png</code> 로 넣고
+  설비의 건물 이름과 그림 위 좌표를 맞추면 됩니다. 지금은 건물 이름만으로
+  네모를 자동 배치합니다 — 그림 없이도 어느 건물에 무엇이 있는지는 바로 보입니다.
+</div>
+"""
+
+
+def main():
+    made = []
+    for f, _, _, _ in MENU:
+        made.append(build(f, PAGES[f]))
+    print("  구운 페이지 %d개: %s" % (len(made), " ".join(made)))
+    # 메뉴와 실제 파일이 어긋나지 않는지 확인한다
+    for f, _, _, _ in MENU:
+        html = io.open(os.path.join(HERE, f), encoding="utf-8").read()
+        n = len(re.findall(r'<li><a href="[^"]+\.html"', html))
+        assert n == len(MENU), "%s 의 메뉴가 %d개 (%d개여야 함)" % (f, n, len(MENU))
+        assert "<main>" in html, "%s 에 <main> 이 없습니다 — 여백이 통째로 사라집니다" % f
+    print("  메뉴 %d개 · <main> 확인 완료" % len(MENU))
+
+
+if __name__ == "__main__":
+    main()

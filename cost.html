@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>차년도 비용 예측 | Facility AI</title>
+<meta name="description" content="등록된 주기와 단가로 내년에 돌아오는 항목과 금액을 셉니다.">
+<link rel="stylesheet" href="css/style.css">
+<!-- === HD:META:BEGIN (자동 생성 — scripts 로 다시 굽습니다) === -->
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="canonical" href="https://aebonlee.github.io/hd-project15/cost.html">
+<meta name="robots" content="index,follow">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="HD 생성형 AI 업무자동화 전문가과정">
+<meta property="og:url" content="https://aebonlee.github.io/hd-project15/cost.html">
+<meta property="og:title" content="차년도 비용 예측 — HD 생성형 AI 업무자동화 전문가과정">
+<meta property="og:description" content="그 해에 돌아오는 횟수를 세어 곱합니다. 비용을 모르는 항목은 0 으로 세지 않고 따로 보여 줍니다.">
+<meta property="og:image" content="https://aebonlee.github.io/hd-project15/og-cost.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale" content="ko_KR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="차년도 비용 예측 — HD 생성형 AI 업무자동화 전문가과정">
+<meta name="twitter:description" content="그 해에 돌아오는 횟수를 세어 곱합니다. 비용을 모르는 항목은 0 으로 세지 않고 따로 보여 줍니다.">
+<meta name="twitter:image" content="https://aebonlee.github.io/hd-project15/og-cost.png">
+<!-- === HD:META:END === -->
+</head>
+<body>
+
+<nav class="topnav"><div class="topnav-inner">
+  <a class="topnav-brand" href="index.html">Facility AI<small>유틸리티 설비·에너지</small></a>
+  <ul class="topnav-links">
+    <li><a href="index.html">개요</a></li>
+    <li><a href="equipment.html">설비</a></li>
+    <li><a href="alerts.html">알림</a></li>
+    <li><a href="history.html">이력</a></li>
+    <li><a href="cost.html" class="active">비용</a></li>
+    <li><a href="energy.html">에너지</a></li>
+    <li><a href="map.html">조감도</a></li>
+  </ul>
+</div></nav>
+
+<header class="hero"><div class="wrap">
+  <div class="eyebrow">HD 생성형 AI 업무자동화 전문가과정 · 기획 지준경</div>
+  <h1>차년도 비용 예측</h1>
+  <p>등록된 주기와 단가로 내년에 돌아오는 항목과 금액을 셉니다.</p>
+</div></header>
+
+<main><div class="wrap">
+<div class="card">
+  <div class="btnrow" style="margin-top:0">
+    <label style="display:flex;align-items:center;gap:8px">기준 연도
+      <input type="number" id="year" min="2000" max="2100" style="width:110px;min-height:38px"></label>
+    <button class="btn primary" id="calc">계산</button>
+    <button class="btn" id="cost-xlsx">엑셀로 내보내기</button>
+  </div>
+  <p class="sub" style="margin:12px 0 0">
+    그 해에 <b>돌아오는 횟수</b>를 세어 곱합니다. 주기가 6개월이면 한 해에 두 번이므로 두 배입니다.
+  </p>
+</div>
+
+<div class="stats" id="cost-stats"></div>
+
+<h2>항목별</h2>
+<div class="tablewrap"><table id="cost-table">
+  <thead><tr><th>항목</th><th>구분</th><th>횟수</th><th>단가</th><th>합계</th></tr></thead>
+  <tbody></tbody></table></div>
+
+<h2>셀 수 없었던 것</h2>
+<p class="sub">아래 항목은 합계에 넣지 않았습니다. <b>0 원으로 세면 예산이 적게 잡히고 그 사실이 드러나지 않기 때문입니다.</b></p>
+<ul class="filelist" id="cost-unknown"></ul>
+</div></main>
+
+<footer><div class="wrap">
+  <p>Facility AI — 캠퍼스 유틸리티 설비·에너지 통합 관리.
+     자료는 <b>이 브라우저에만</b> 저장됩니다. 다른 PC 로 옮기려면 설비 화면의 내보내기를 쓰세요.</p>
+  <p class="sub">문의 dreamitbiz@naver.com · 010-2634-2426 · 카카오톡 aebon</p>
+</div></footer>
+
+<script src="lib/xlsx.full.min.js"></script>
+<script src="js/store.js"></script>
+<script src="js/schedule.js"></script>
+<script src="js/law.js"></script>
+<script src="js/energy.js"></script>
+<script src="js/app.js"></script>
+
+</body>
+</html>

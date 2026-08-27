@@ -1,0 +1,48 @@
+# 테스트 — main 브랜치 보호의 "필수 상태 체크"로 걸 수 있게 만든 것.
+#
+# main 을 보호하려면 요구할 체크가 하나는 있어야 한다.
+# 이 워크플로의 `test` 잡이 그 체크다.
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # 의존성이 없다. 파일을 열면 그대로 도는 것이 이 저장소의 전제이므로
+      # npm install 단계 자체를 두지 않는다.
+      - name: 단위 테스트 (날짜 · 법령 · 에너지 파싱)
+        run: node test/logic.test.js
+
+      # 페이지 일곱 장은 build.py 가 굽는다. 손으로 고치면 다시 구울 때 날아가므로,
+      # 커밋된 판과 다시 구운 판이 같은지 확인한다.
+      - name: 다시 구워도 같은가
+        run: |
+          python3 build.py
+          git diff --exit-code -- '*.html'
+
+      # 규칙 61개가 전부 통과해도 app.js 의 오타 하나면 페이지가 빈 화면이 된다.
+      # 규칙은 맞는데 아무도 그것을 볼 수 없는 상태다. 파일을 읽어서는 안 잡힌다.
+      - name: 화면 연기 테스트 (일곱 장을 실제로 띄운다)
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+          node test/smoke.browser.js

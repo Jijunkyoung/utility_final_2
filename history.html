@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>이력 관리 | Facility AI</title>
+<meta name="description" content="교체·고장 AS·법정검사를 마칠 때마다 날짜와 금액을 남깁니다. 이 기록이 비용 예측의 근거입니다.">
+<link rel="stylesheet" href="css/style.css">
+<!-- === HD:META:BEGIN (자동 생성 — scripts 로 다시 굽습니다) === -->
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="canonical" href="https://aebonlee.github.io/hd-project15/history.html">
+<meta name="robots" content="index,follow">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="HD 생성형 AI 업무자동화 전문가과정">
+<meta property="og:url" content="https://aebonlee.github.io/hd-project15/history.html">
+<meta property="og:title" content="이력 관리 — HD 생성형 AI 업무자동화 전문가과정">
+<meta property="og:description" content="교체·고장 AS·법정검사를 마칠 때마다 날짜와 금액을 남깁니다. 이 기록이 비용 예측의 근거입니다.">
+<meta property="og:image" content="https://aebonlee.github.io/hd-project15/og-history.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale" content="ko_KR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="이력 관리 — HD 생성형 AI 업무자동화 전문가과정">
+<meta name="twitter:description" content="교체·고장 AS·법정검사를 마칠 때마다 날짜와 금액을 남깁니다. 이 기록이 비용 예측의 근거입니다.">
+<meta name="twitter:image" content="https://aebonlee.github.io/hd-project15/og-history.png">
+<!-- === HD:META:END === -->
+</head>
+<body>
+
+<nav class="topnav"><div class="topnav-inner">
+  <a class="topnav-brand" href="index.html">Facility AI<small>유틸리티 설비·에너지</small></a>
+  <ul class="topnav-links">
+    <li><a href="index.html">개요</a></li>
+    <li><a href="equipment.html">설비</a></li>
+    <li><a href="alerts.html">알림</a></li>
+    <li><a href="history.html" class="active">이력</a></li>
+    <li><a href="cost.html">비용</a></li>
+    <li><a href="energy.html">에너지</a></li>
+    <li><a href="map.html">조감도</a></li>
+  </ul>
+</div></nav>
+
+<header class="hero"><div class="wrap">
+  <div class="eyebrow">HD 생성형 AI 업무자동화 전문가과정 · 기획 지준경</div>
+  <h1>이력 관리</h1>
+  <p>교체·고장 AS·법정검사를 마칠 때마다 날짜와 금액을 남깁니다. 이 기록이 비용 예측의 근거입니다.</p>
+</div></header>
+
+<main><div class="wrap">
+<div class="card">
+  <h3 style="font-size:16px;margin-bottom:10px">이력 추가</h3>
+  <form id="h-form" class="grid-form">
+    <label>설비 <select name="equipmentId" id="h-eq" required></select></label>
+    <label>구분
+      <select name="kind">
+        <option>법정검사</option><option>소모품 교체</option><option>고장 AS</option><option>기타</option>
+      </select></label>
+    <label>일자 <input name="date" type="date" required></label>
+    <label>금액(원) <input name="cost" type="number" min="0" step="1000" placeholder="모르면 비워 둡니다"></label>
+    <label>업체 <input name="vendor"></label>
+    <label style="grid-column:1/-1">내용 <input name="memo" placeholder="필터 4개 교체 / 정기검사 합격"></label>
+  </form>
+  <div class="note" style="margin-bottom:0">
+    <b>금액을 모르면 비워 두세요.</b> 0 을 넣으면 비용 예측에서 <b>0 원짜리 항목</b>으로 잡혀
+    예산이 실제보다 적게 나옵니다. 비워 두면 “미상”으로 따로 세어 눈에 보입니다.
+  </div>
+  <div class="btnrow">
+    <button class="btn primary" id="h-save">추가</button>
+    <button class="btn" id="h-apply" title="법정검사·소모품 교체 이력을 설비의 마지막 일자에 반영합니다">
+      마지막 일자에 반영</button>
+  </div>
+</div>
+
+<h2>이력 <span class="sub" id="h-count"></span></h2>
+<div class="tablewrap"><table id="h-table">
+  <thead><tr><th></th><th>일자</th><th>설비</th><th>구분</th><th>내용</th><th>업체</th><th>금액</th></tr></thead>
+  <tbody></tbody></table></div>
+
+<h2>설비별 누계</h2>
+<div class="tablewrap"><table id="h-sum">
+  <thead><tr><th>설비</th><th>건수</th><th>합계 금액</th><th>금액 미상</th></tr></thead>
+  <tbody></tbody></table></div>
+</div></main>
+
+<footer><div class="wrap">
+  <p>Facility AI — 캠퍼스 유틸리티 설비·에너지 통합 관리.
+     자료는 <b>이 브라우저에만</b> 저장됩니다. 다른 PC 로 옮기려면 설비 화면의 내보내기를 쓰세요.</p>
+  <p class="sub">문의 dreamitbiz@naver.com · 010-2634-2426 · 카카오톡 aebon</p>
+</div></footer>
+
+<script src="lib/xlsx.full.min.js"></script>
+<script src="js/store.js"></script>
+<script src="js/schedule.js"></script>
+<script src="js/law.js"></script>
+<script src="js/energy.js"></script>
+<script src="js/app.js"></script>
+
+</body>
+</html>
