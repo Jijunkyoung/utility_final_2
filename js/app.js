@@ -511,6 +511,9 @@
       title: title || file.name, fileName: file.name, fileSize: file.size, fileType: file.type,
       fileLastModified: file.lastModified, storageStatus: '업로드·분석 중' }, meta || {});
     db.manuals.push(o); persist();
+    function currentManual() {
+      return db.manuals.find(function (m) { return m.id === o.id; }) || o;
+    }
     if (detailEquipment() && detailEquipment().id === e.id) {
       $('#manual-status').innerHTML = '<div class="note">' + esc(file.name) + '을 업로드하고 분석하고 있습니다.</div>';
       renderDetailManuals(e);
@@ -518,8 +521,9 @@
     /* 공유폴더 서버가 꺼져 있어도 브라우저 안의 문서 분석을 기다리게 하지 않는다.
      * 파일 저장과 본문 분석은 독립적으로 끝나며, 각각 끝나는 즉시 화면을 갱신한다. */
     I.upload(db.settings, e.id, '매뉴얼', file).then(function (upload) {
-      o.storageStatus = upload.ok ? '공유폴더 저장 완료' : '브라우저 임시 저장';
-      if (upload.ok) { o.storagePath = upload.path; o.filePath = upload.path; }
+      var manual = currentManual();
+      manual.storageStatus = upload.ok ? '공유폴더 저장 완료' : '브라우저 임시 저장';
+      if (upload.ok) { manual.storagePath = upload.path; manual.filePath = upload.path; }
       persist();
       if (detailEquipment() && detailEquipment().id === e.id) renderDetailManuals(e);
     });
@@ -536,21 +540,24 @@
           return { result: parsed || fallback, provider: parsed ? ai.provider : 'rules' };
         });
       }).then(function (done) {
-        o.analysis = done.result; o.analysis.provider = done.provider || o.analysis.provider || 'rules';
-        o.analyzedAt = new Date().toISOString();
-        var savedAnalysis = { id: St.newId('a'), equipmentId: e.id, sourceId: o.id,
-          kind: 'manual', createdAt: o.analyzedAt, result: o.analysis };
+        var manual = currentManual();
+        manual.analysis = done.result;
+        manual.analysis.provider = done.provider || manual.analysis.provider || 'rules';
+        manual.analyzedAt = new Date().toISOString();
+        var savedAnalysis = { id: St.newId('a'), equipmentId: e.id, sourceId: manual.id,
+          kind: 'manual', createdAt: manual.analyzedAt, result: manual.analysis };
         db.analysisResults.push(savedAnalysis); I.saveAnalysis(db.settings, savedAnalysis);
         persist();
         if (detailEquipment() && detailEquipment().id === e.id) {
-          $('#manual-status').innerHTML = '<div class="ok">' + esc(o.title) + ' — ' + esc(o.storageStatus)
+          $('#manual-status').innerHTML = '<div class="ok">' + esc(manual.title) + ' — ' + esc(manual.storageStatus)
             + ' · 분석 완료</div>';
           renderDetailManuals(e);
         }
       }).catch(function (err) {
-        o.storageStatus = '분석 실패'; o.analysisError = err && err.message || String(err); persist();
+        var manual = currentManual();
+        manual.storageStatus = '분석 실패'; manual.analysisError = err && err.message || String(err); persist();
         if ($('#manual-status')) $('#manual-status').innerHTML = '<div class="warn">분석하지 못했습니다: '
-          + esc(o.analysisError) + '</div>';
+          + esc(manual.analysisError) + '</div>';
       });
   }
 
