@@ -13,17 +13,17 @@
 <link rel="canonical" href="https://aebonlee.github.io/hd-project15/map.html">
 <meta name="robots" content="index,follow">
 <meta property="og:type" content="website">
-<meta property="og:site_name" content="HD 생성형 AI 업무자동화 전문가과정">
+<meta property="og:site_name" content="Facility AI">
 <meta property="og:url" content="https://aebonlee.github.io/hd-project15/map.html">
-<meta property="og:title" content="캠퍼스 조감도 — HD 생성형 AI 업무자동화 전문가과정">
-<meta property="og:description" content="건물을 누르면 그 건물에 설치된 설비와 사양, 다음 검사일을 봅니다.">
+<meta property="og:title" content="캠퍼스 조감도 — Facility AI">
+<meta property="og:description" content="건물을 누르면 그 건물에 설치된 설비와 사양을 봅니다.">
 <meta property="og:image" content="https://aebonlee.github.io/hd-project15/og-map.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="캠퍼스 조감도 — HD 생성형 AI 업무자동화 전문가과정">
-<meta name="twitter:description" content="건물을 누르면 그 건물에 설치된 설비와 사양, 다음 검사일을 봅니다.">
+<meta name="twitter:title" content="캠퍼스 조감도 — Facility AI">
+<meta name="twitter:description" content="건물을 누르면 그 건물에 설치된 설비와 사양을 봅니다.">
 <meta name="twitter:image" content="https://aebonlee.github.io/hd-project15/og-map.png">
 <!-- === HD:META:END === -->
 </head>
@@ -50,9 +50,9 @@
 
 <main><div class="wrap">
 <div class="card">
-  <h3 style="font-size:16px;margin-bottom:6px">건물 배치</h3>
-  <p class="sub">건물을 누르면 그 건물의 설비가 아래에 나옵니다.
-     건물은 설비에 적은 <b>건물</b> 값에서 자동으로 만들어집니다.</p>
+	  <h3 style="font-size:16px;margin-bottom:6px">건물 배치</h3>
+	  <p class="sub">건물을 누르면 그 건물의 설비가 아래에 나옵니다.
+	     건물은 설비에 적은 <b>건물</b> 값과 분리된 건물 ID·좌표로 배치됩니다.</p>
   <div id="campus"></div>
 </div>
 
@@ -62,11 +62,11 @@
     <th>소모전력</th><th>유지관리자</th><th>다음 검사</th></tr></thead>
   <tbody></tbody></table></div>
 
-<div class="note">
-  <b>실제 조감도 그림을 쓰려면</b> 이미지를 <code>img/campus.png</code> 로 넣고
-  설비의 건물 이름과 그림 위 좌표를 맞추면 됩니다. 지금은 건물 이름만으로
-  네모를 자동 배치합니다 — 그림 없이도 어느 건물에 무엇이 있는지는 바로 보입니다.
-</div>
+	<div class="note">
+	  <b>실제 조감도 그림을 쓰려면</b> 이미지를 <code>img/campus.png</code> 로 넣고
+	  <code>buildings</code>의 백분율 좌표를 그림에 맞추면 됩니다. 지금은 같은 좌표 구조에
+	  네모를 배치합니다 — 그림 없이도 어느 건물에 무엇이 있는지는 바로 보입니다.
+	</div>
 </div></main>
 
 <footer><div class="wrap">

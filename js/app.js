@@ -10,6 +10,8 @@
 
   var S = window.Schedule, L = window.Law, E = window.Energy, St = window.Store;
   var db = St.load();
+  var currentDetailEquipmentId = null;
+  var selectedManualFile = null;
 
   /* ────────────────────────────────────────────────────────── 도구 */
 
@@ -92,7 +94,7 @@
     var over = due.filter(function (d) { return d.r.status === '기한 초과'; });
     var soon = due.filter(function (d) { return d.r.status === '알림' || d.r.status === '오늘'; });
     var unknown = due.filter(function (d) { return d.r.next === null; });
-    var review = L.needsReview(db.equipments, t);
+    var review = L.needsReview(db.equipments, t, 365, db.lawReviews);
 
     $('#summary').innerHTML = [
       ['설비', db.equipments.length + '건', ''],
@@ -145,6 +147,7 @@
       ['cycleMonths', 'inspectCost'].forEach(function (k) {
         o[k] = o[k] === '' ? null : Number(o[k]);
       });
+      ensureBuilding(o.building);
       db.equipments.push(o);
       if (persist()) { f.reset(); showLawHint(); renderEquipment(); }
     });
@@ -153,6 +156,24 @@
     $('#export').addEventListener('click', exportJson);
     $('#import-file').addEventListener('change', importJson);
     $('#export-xlsx').addEventListener('click', exportEquipmentXlsx);
+
+    $('#detail-close').addEventListener('click', closeEquipmentDetail);
+    $('#eq-detail').addEventListener('close', function () {
+      currentDetailEquipmentId = null;
+      document.body.classList.remove('detail-open');
+    });
+    $$('#eq-detail [data-detail-tab]').forEach(function (b) {
+      b.addEventListener('click', function () { showDetailTab(b.getAttribute('data-detail-tab')); });
+    });
+    $('#detail-basic-save').addEventListener('click', saveDetailBasic);
+    $('#detail-consumable-save').addEventListener('click', saveDetailConsumable);
+    $('#detail-history-save').addEventListener('click', saveDetailHistory);
+    $('#detail-manual-save').addEventListener('click', saveDetailManual);
+    $('#detail-law-save').addEventListener('click', saveDetailLaw);
+    $('#manual-file').addEventListener('change', function () {
+      selectedManualFile = this.files && this.files[0] || null;
+      $('#manual-file-label').textContent = selectedManualFile ? selectedManualFile.name : '파일 선택';
+    });
 
     renderEquipment();
   }
@@ -184,9 +205,11 @@
     }).join('');
 
     $('#eq-table tbody').innerHTML = db.equipments.length ? db.equipments.map(function (e) {
+      var latestLaw = L.latestReview(e.id, db.lawReviews);
       return '<tr>'
-        + '<td><button class="btn" data-del="' + esc(e.id) + '" '
-        + 'style="min-height:26px;padding:0 8px;font-size:12px">삭제</button></td>'
+        + '<td><div style="display:flex;gap:5px">'
+        + '<button class="btn primary small-btn" data-detail="' + esc(e.id) + '">상세</button>'
+        + '<button class="btn small-btn" data-del="' + esc(e.id) + '">삭제</button></div></td>'
         + '<td class="mono">' + esc(e.code) + '</td>'
         + '<td>' + esc(e.name) + '</td>'
         + '<td>' + esc(e.kind) + '</td>'
@@ -196,7 +219,7 @@
         + '<td>' + esc(e.mgr) + '</td>'
         + '<td class="mono">' + esc(e.lastInspect || '—') + '</td>'
         + '<td class="num">' + (e.cycleMonths ? e.cycleMonths + '개월' : '—') + '</td>'
-        + '<td class="mono">' + esc(e.lawCheckedAt || '—') + '</td></tr>';
+        + '<td class="mono">' + esc((latestLaw && latestLaw.checkedAt) || e.lawCheckedAt || '—') + '</td></tr>';
     }).join('') : '<tr><td colspan="11" class="sub">등록된 설비가 없습니다.</td></tr>';
 
     $$('#eq-table [data-del]').forEach(function (b) {
@@ -211,12 +234,292 @@
         if (persist()) renderEquipment();
       });
     });
+    $$('#eq-table [data-detail]').forEach(function (b) {
+      b.addEventListener('click', function () { openEquipmentDetail(b.getAttribute('data-detail')); });
+    });
   }
 
   function buildings() {
-    var s = {};
-    db.equipments.forEach(function (e) { if (e.building) s[e.building] = 1; });
-    return Object.keys(s).sort();
+    return buildingRecords().map(function (b) { return b.name; }).sort();
+  }
+
+  function buildingRecords() {
+    return (db.buildings || []).filter(function (b) { return b && b.name; });
+  }
+
+  function ensureBuilding(name) {
+    name = String(name || '').trim();
+    if (!name || buildingRecords().some(function (b) { return b.name === name; })) return;
+    var i = db.buildings.length, col = i % 4, row = Math.floor(i / 4);
+    db.buildings.push({ id: St.buildingId(name), name: name,
+      x: 4 + col * 24, y: 8 + row * 30, w: 20, h: 22 });
+  }
+
+  /* ─────────────────────────────────────────────── 설비 상세 5개 탭 */
+
+  function detailEquipment() { return eqById(currentDetailEquipmentId); }
+
+  function openEquipmentDetail(id) {
+    var e = eqById(id);
+    if (!e) return;
+    currentDetailEquipmentId = id;
+    $('#detail-title').textContent = e.name || '설비 상세';
+    $('#detail-code').textContent = (e.code || '설비번호 없음') + ' · ' + (e.kind || '종류 미입력');
+    selectedManualFile = null;
+    $('#manual-file').value = '';
+    $('#manual-file-label').textContent = '파일 선택';
+    $('#detail-history-form [name=date]').value = today();
+    $('#detail-law-form [name=checkedAt]').value = today();
+    showDetailTab('basic');
+    renderEquipmentDetail();
+    var dialog = $('#eq-detail');
+    document.body.classList.add('detail-open');
+    if (dialog.showModal) dialog.showModal(); else dialog.setAttribute('open', '');
+  }
+
+  function closeEquipmentDetail() {
+    var dialog = $('#eq-detail');
+    if (dialog.close) dialog.close(); else dialog.removeAttribute('open');
+    currentDetailEquipmentId = null;
+    document.body.classList.remove('detail-open');
+  }
+
+  function showDetailTab(name) {
+    $$('#eq-detail [data-detail-tab]').forEach(function (b) {
+      var on = b.getAttribute('data-detail-tab') === name;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    $$('#eq-detail [data-detail-panel]').forEach(function (p) {
+      var on = p.getAttribute('data-detail-panel') === name;
+      p.hidden = !on; p.classList.toggle('on', on);
+    });
+  }
+
+  function field(label, name, v, type, extra) {
+    return '<label>' + esc(label) + ' <input name="' + esc(name) + '" type="' + esc(type || 'text')
+      + '" value="' + esc(v == null ? '' : v) + '"' + (extra || '') + '></label>';
+  }
+
+  function renderDetailBasic(e) {
+    var kindOptions = '<option value="">— 고르세요 —</option>' + L.KINDS.map(function (k) {
+      return '<option' + (e.kind === k ? ' selected' : '') + '>' + esc(k) + '</option>';
+    }).join('');
+    $('#detail-basic-form').innerHTML =
+        field('설비번호', 'code', e.code, 'text', ' required')
+      + field('설비명', 'name', e.name, 'text', ' required')
+      + '<label>종류 <select name="kind">' + kindOptions + '</select></label>'
+      + field('건물', 'building', e.building)
+      + field('설치위치', 'place', e.place)
+      + field('제조사', 'manufacturer', e.manufacturer)
+      + field('모델', 'model', e.model)
+      + field('사양', 'spec', e.spec)
+      + field('용량', 'capacity', e.capacity)
+      + field('유량', 'flow', e.flow)
+      + field('압력', 'pressure', e.pressure)
+      + field('소모전력', 'power', e.power)
+      + field('냉난방용량', 'hvac', e.hvac)
+      + field('설치일', 'installedAt', e.installedAt, 'date')
+      + field('법정선임관리자', 'legalMgr', e.legalMgr)
+      + field('유지관리자', 'mgr', e.mgr)
+      + field('유지관리자 메일', 'mgrEmail', e.mgrEmail, 'email')
+      + field('마지막 법정검사', 'lastInspect', e.lastInspect, 'date')
+      + field('검사 주기(개월)', 'cycleMonths', e.cycleMonths, 'number', ' min="1" step="1"')
+      + field('검사 비용(원)', 'inspectCost', e.inspectCost, 'number', ' min="0" step="1000"')
+      + field('비고', 'note', e.note);
+  }
+
+  function renderEquipmentDetail() {
+    var e = detailEquipment();
+    if (!e) return;
+    $('#detail-title').textContent = e.name || '설비 상세';
+    $('#detail-code').textContent = (e.code || '설비번호 없음') + ' · ' + (e.kind || '종류 미입력');
+    renderDetailBasic(e);
+    renderDetailConsumables(e);
+    renderDetailHistory(e);
+    renderDetailManuals(e);
+    renderDetailLaws(e);
+  }
+
+  function saveDetailBasic() {
+    var e = detailEquipment(), f = $('#detail-basic-form');
+    if (!e || !f.reportValidity()) return;
+    $$('[name]', f).forEach(function (i) { e[i.name] = i.value.trim(); });
+    ['cycleMonths', 'inspectCost'].forEach(function (k) {
+      e[k] = e[k] === '' ? null : Number(e[k]);
+    });
+    ensureBuilding(e.building);
+    if (persist()) { renderEquipment(); renderEquipmentDetail(); }
+  }
+
+  function saveDetailConsumable() {
+    var e = detailEquipment(), f = $('#detail-consumable-form');
+    if (!e || !f.reportValidity()) return;
+    var o = { id: St.newId('c'), equipmentId: e.id };
+    $$('[name]', f).forEach(function (i) { o[i.name] = i.value.trim(); });
+    o.cycleMonths = Number(o.cycleMonths);
+    o.cost = o.cost === '' ? null : Number(o.cost);
+    db.consumables.push(o);
+    if (persist()) { f.reset(); renderDetailConsumables(e); }
+  }
+
+  function renderDetailConsumables(e) {
+    var list = St.forEquipment(db.consumables, e.id);
+    $('#detail-consumables tbody').innerHTML = list.length ? list.map(function (c) {
+      var r = S.nextReplacement(c.lastDate, c.cycleMonths, today());
+      return '<tr><td><button class="btn small-btn" data-consumable-del="' + esc(c.id) + '">삭제</button></td>'
+        + '<td>' + esc(c.name) + '</td><td class="num">' + esc(c.cycleMonths) + '개월</td>'
+        + '<td class="mono">' + esc(c.lastDate || '—') + '</td><td class="mono">' + esc(r.nextText || '—') + '</td>'
+        + '<td>' + badge(r.status) + '</td><td class="num">' + (c.cost === null ? '미상' : won(c.cost)) + '</td></tr>';
+    }).join('') : '<tr><td colspan="7" class="sub">등록된 소모품이 없습니다.</td></tr>';
+    $$('#detail-consumables [data-consumable-del]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        db.consumables = db.consumables.filter(function (x) { return x.id !== b.getAttribute('data-consumable-del'); });
+        if (persist()) renderDetailConsumables(e);
+      });
+    });
+  }
+
+  function saveDetailHistory() {
+    var e = detailEquipment(), f = $('#detail-history-form');
+    if (!e || !f.reportValidity()) return;
+    var o = { id: St.newId('h'), equipmentId: e.id };
+    $$('[name]', f).forEach(function (i) { o[i.name] = i.value.trim(); });
+    o.cost = o.cost === '' ? null : Number(o.cost);
+    db.history.push(o);
+    if (o.kind === '법정검사' && (!e.lastInspect || o.date > e.lastInspect)) e.lastInspect = o.date;
+    db.consumables.forEach(function (c) {
+      if (c.equipmentId === e.id && o.kind === '소모품 교체'
+          && o.memo.indexOf(c.name) >= 0 && (!c.lastDate || o.date > c.lastDate)) c.lastDate = o.date;
+    });
+    if (persist()) {
+      f.reset(); f.querySelector('[name=date]').value = today();
+      renderDetailHistory(e); renderDetailConsumables(e); renderEquipment();
+    }
+  }
+
+  function renderDetailHistory(e) {
+    var list = St.forEquipment(db.history, e.id).sort(function (a, b) { return a.date < b.date ? 1 : -1; });
+    $('#detail-history tbody').innerHTML = list.length ? list.map(function (h) {
+      return '<tr><td><button class="btn small-btn" data-history-del="' + esc(h.id) + '">삭제</button></td>'
+        + '<td class="mono">' + esc(h.date) + '</td><td>' + esc(h.kind) + '</td><td>' + esc(h.memo) + '</td>'
+        + '<td>' + esc(h.vendor) + '</td><td class="num">' + (h.cost === null ? '미상' : won(h.cost)) + '</td></tr>';
+    }).join('') : '<tr><td colspan="6" class="sub">등록된 이력이 없습니다.</td></tr>';
+    $$('#detail-history [data-history-del]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        db.history = db.history.filter(function (x) { return x.id !== b.getAttribute('data-history-del'); });
+        if (persist()) renderDetailHistory(e);
+      });
+    });
+  }
+
+  function saveDetailManual() {
+    var e = detailEquipment(), f = $('#detail-manual-form');
+    if (!e || !f.reportValidity()) return;
+    var o = { id: St.newId('m'), equipmentId: e.id, addedAt: new Date().toISOString() };
+    $$('[name]', f).forEach(function (i) { o[i.name] = i.value.trim(); });
+    if (selectedManualFile) {
+      o.fileName = selectedManualFile.name;
+      o.fileSize = selectedManualFile.size;
+      o.fileType = selectedManualFile.type;
+      o.fileLastModified = selectedManualFile.lastModified;
+    }
+    db.manuals.push(o);
+    if (persist()) {
+      f.reset(); selectedManualFile = null; $('#manual-file-label').textContent = '파일 선택';
+      renderDetailManuals(e);
+    }
+  }
+
+  function formatBytes(n) {
+    n = Number(n);
+    if (!Number.isFinite(n) || n < 0) return '';
+    if (n < 1024) return n + ' B';
+    if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
+    return (n / 1048576).toFixed(1) + ' MB';
+  }
+
+  function copyText(value) {
+    var ta = document.createElement('textarea');
+    ta.value = value; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); } catch (ignore) {}
+    ta.remove();
+  }
+
+  function renderDetailManuals(e) {
+    var list = St.forEquipment(db.manuals, e.id).slice();
+    if (e.manual && !list.some(function (m) { return m.filePath === e.manual; })) {
+      list.unshift({ id: '', title: '기존 매뉴얼 경로', filePath: e.manual, legacy: true });
+    }
+    $('#detail-manuals').innerHTML = list.length ? list.map(function (m) {
+      var path = m.filePath || m.fileName || '경로/파일명 미입력';
+      var meta = [m.version, m.fileName, formatBytes(m.fileSize), m.note].filter(Boolean).join(' · ');
+      return '<li><div><b>' + esc(m.title) + '</b><div class="meta">' + esc(path) + '</div>'
+        + (meta ? '<div class="meta">' + esc(meta) + '</div>' : '') + '</div><div class="btnrow" style="margin:0">'
+        + '<button class="btn small-btn" data-copy-path="' + esc(path) + '">경로 복사</button>'
+        + (m.legacy ? '' : '<button class="btn small-btn" data-manual-del="' + esc(m.id) + '">삭제</button>')
+        + '</div></li>';
+    }).join('') : '<li><span class="sub">등록된 매뉴얼이 없습니다.</span></li>';
+    $$('#detail-manuals [data-copy-path]').forEach(function (b) {
+      b.addEventListener('click', function () { copyText(b.getAttribute('data-copy-path')); b.textContent = '복사됨'; });
+    });
+    $$('#detail-manuals [data-manual-del]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        db.manuals = db.manuals.filter(function (x) { return x.id !== b.getAttribute('data-manual-del'); });
+        if (persist()) renderDetailManuals(e);
+      });
+    });
+  }
+
+  function saveDetailLaw() {
+    var e = detailEquipment(), f = $('#detail-law-form');
+    if (!e || !f.reportValidity()) return;
+    var o = { id: St.newId('l'), equipmentId: e.id };
+    $$('[name]', f).forEach(function (i) {
+      o[i.name] = i.type === 'checkbox' ? i.checked : i.value.trim();
+    });
+    db.lawReviews.push(o);
+    e.lawCheckedAt = o.checkedAt;
+    if (persist()) {
+      f.reset(); f.querySelector('[name=checkedAt]').value = today();
+      renderDetailLaws(e); renderEquipment();
+    }
+  }
+
+  function renderDetailLaws(e) {
+    var candidates = L.lawsForEquipment(e);
+    $('#detail-law-candidates').innerHTML = candidates.length
+      ? '<div class="candidate-grid">' + candidates.map(function (c, i) {
+          return '<article class="law-candidate"><h4>' + esc(c.law) + '</h4><p>' + esc(c.about) + '</p>'
+            + '<p><b>검토 입력값:</b> ' + esc(c.basis || '사양 미입력') + '</p>'
+            + (c.missing.length ? '<p>추가 확인 권장: ' + esc(c.missing.join(', ')) + '</p>' : '')
+            + '<button class="btn small-btn" data-law-candidate="' + i + '">이 법령 검토 기록</button></article>';
+        }).join('') + '</div>'
+      : '<div class="note">이 설비 종류에 등록된 법령 후보가 없습니다. 사내 법령 자료를 확인한 뒤 아래에 직접 기록하세요.</div>';
+    $$('#detail-law-candidates [data-law-candidate]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var c = candidates[Number(b.getAttribute('data-law-candidate'))];
+        $('#detail-law-form [name=law]').value = c ? c.law : '';
+        $('#detail-law-form [name=law]').focus();
+      });
+    });
+
+    var list = St.forEquipment(db.lawReviews, e.id).sort(function (a, b) { return a.checkedAt < b.checkedAt ? 1 : -1; });
+    $('#detail-laws tbody').innerHTML = list.length ? list.map(function (r) {
+      return '<tr><td><button class="btn small-btn" data-law-del="' + esc(r.id) + '">삭제</button></td>'
+        + '<td>' + esc(r.law) + '</td><td class="mono">' + esc(r.checkedAt) + '</td><td>' + esc(r.reviewer) + '</td>'
+        + '<td>' + (r.needsReview ? '<b style="color:var(--warn)">필요</b>' : '완료') + '</td>'
+        + '<td>' + esc(r.filePath) + '</td><td>' + esc(r.note) + '</td></tr>';
+    }).join('') : '<tr><td colspan="7" class="sub">저장된 법령 검토 기록이 없습니다.</td></tr>';
+    $$('#detail-laws [data-law-del]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        db.lawReviews = db.lawReviews.filter(function (x) { return x.id !== b.getAttribute('data-law-del'); });
+        var latest = L.latestReview(e.id, db.lawReviews);
+        e.lawCheckedAt = latest ? latest.checkedAt : null;
+        if (persist()) { renderDetailLaws(e); renderEquipment(); }
+      });
+    });
   }
 
   /* ═══════════════════════════════════════════════════ 알림 */
@@ -653,16 +956,17 @@
   }
 
   function renderCampus() {
-    var bs = buildings();
+    var bs = buildingRecords();
     var box = $('#campus');
     if (!bs.length) {
       box.innerHTML = '<p class="sub">설비에 <b>건물</b> 을 적으면 여기에 나타납니다.</p>';
       return;
     }
-    box.innerHTML = '<div class="campus-grid">' + bs.map(function (b) {
-      var n = db.equipments.filter(function (e) { return e.building === b; }).length;
-      return '<button type="button" class="bldg" data-b="' + esc(b) + '">'
-        + '<b>' + esc(b) + '</b><span>' + n + '건</span></button>';
+    box.innerHTML = '<div class="campus-layout" aria-label="건물 좌표 배치">' + bs.map(function (b) {
+      var n = db.equipments.filter(function (e) { return e.building === b.name; }).length;
+      return '<button type="button" class="bldg" data-b="' + esc(b.name) + '" data-building-id="' + esc(b.id) + '" '
+        + 'style="left:' + Number(b.x) + '%;top:' + Number(b.y) + '%;width:' + Number(b.w) + '%;height:' + Number(b.h) + '%">'
+        + '<b>' + esc(b.name) + '</b><span>' + n + '건</span></button>';
     }).join('') + '</div>';
 
     $$('.bldg').forEach(function (btn) {
@@ -732,11 +1036,14 @@
       var r = S.nextInspection(e.lastInspect, e.cycleMonths, t);
       return {
         설비번호: e.code, 설비명: e.name, 종류: e.kind, 건물: e.building, 설치위치: e.place,
-        사양: e.spec, 유량: e.flow, 압력: e.pressure, 소모전력: e.power, 냉난방용량: e.hvac,
+        제조사: e.manufacturer, 모델: e.model, 사양: e.spec, 용량: e.capacity,
+        유량: e.flow, 압력: e.pressure, 소모전력: e.power, 냉난방용량: e.hvac, 설치일: e.installedAt,
         법정선임관리자: e.legalMgr, 유지관리자: e.mgr, 메일: e.mgrEmail,
         마지막검사: e.lastInspect || '', '주기(개월)': e.cycleMonths || '',
         다음검사: r.nextText || '', 상태: r.status,
-        법령확인일: e.lawCheckedAt || '', 매뉴얼: e.manual
+        법령확인일: e.lawCheckedAt || '', 비고: e.note,
+        매뉴얼수: St.forEquipment(db.manuals, e.id).length,
+        법령검토수: St.forEquipment(db.lawReviews, e.id).length
       };
     }), '설비', 'facility-equipment-' + t + '.xlsx');
   }
@@ -781,12 +1088,14 @@
         mgrEmail: 'facility1@example.com', lastInspect: (y - 1) + '-09-20', cycleMonths: 12,
         inspectCost: 350000, lawCheckedAt: (y - 1) + '-09-20', manual: '공유폴더/설비/승강기' },
       { code: 'U-BO-01', name: '본관 온수보일러', kind: '보일러', building: '본관',
-        place: '지하 2층 보일러실', spec: '1.5 t/h 관류형', pressure: '0.98 MPa', power: '7.5 kW',
+        place: '지하 2층 보일러실', manufacturer: '예시보일러', model: 'SB-1500',
+        spec: '관류형', capacity: '1.5 t/h', pressure: '0.98 MPa', power: '7.5 kW',
         legalMgr: '이정민 / 010-0000-0003', mgr: '박영희 / 010-0000-0002',
         mgrEmail: 'facility1@example.com', lastInspect: y + '-03-11', cycleMonths: 12,
         inspectCost: 420000, lawCheckedAt: y + '-03-11', manual: '공유폴더/설비/보일러' },
       { code: 'U-CH-01', name: '연구동 터보냉동기', kind: '냉동기', building: '연구동',
-        place: '옥상 기계실', spec: '300 RT', flow: '1,200 LPM', power: '180 kW',
+        place: '옥상 기계실', manufacturer: '예시냉동', model: 'TC-300',
+        spec: '수냉식 터보', capacity: '300 RT', flow: '1,200 LPM', power: '180 kW',
         legalMgr: '이정민 / 010-0000-0003', mgr: '최민수 / 010-0000-0004',
         mgrEmail: 'facility2@example.com', lastInspect: (y - 1) + '-06-01', cycleMonths: 12,
         inspectCost: 900000, lawCheckedAt: (y - 2) + '-06-01', manual: '공유폴더/설비/냉동기' },
@@ -818,6 +1127,28 @@
       { equipmentId: eq[0].id, kind: '고장 AS', date: y + '-07-03', cost: null, vendor: '승강기서비스', memo: '도어 센서 조정 (금액 미확인)' }
     ].map(function (h) { h.id = St.newId('h'); return h; });
 
+    var manuals = [
+      { equipmentId: eq[1].id, title: '온수보일러 운전·정비 매뉴얼', version: 'Rev.2',
+        filePath: '\\\\fileserver\\facility\\boiler\\SB-1500-manual.pdf', note: '사내 공유폴더 예시' },
+      { equipmentId: eq[2].id, title: '터보냉동기 점검 매뉴얼', version: 'Rev.1',
+        filePath: '\\\\fileserver\\facility\\chiller\\TC-300-manual.pdf', note: '사내 공유폴더 예시' }
+    ].map(function (m) { m.id = St.newId('m'); m.addedAt = new Date().toISOString(); return m; });
+
+    var lawReviews = [
+      { equipmentId: eq[1].id, law: '에너지이용 합리화법', checkedAt: y + '-03-11',
+        reviewer: '예시 담당자', note: '검사대상기기 해당 여부를 사내 자료로 검토',
+        filePath: '\\\\fileserver\\facility\\law\\energy-act.pdf', needsReview: false },
+      { equipmentId: eq[2].id, law: '고압가스 안전관리법', checkedAt: (y - 2) + '-06-01',
+        reviewer: '예시 담당자', note: '설비 변경 시 재검토',
+        filePath: '\\\\fileserver\\facility\\law\\gas-safety.pdf', needsReview: true }
+    ].map(function (l) { l.id = St.newId('l'); return l; });
+
+    var buildingData = [
+      { id: 'b-main', name: '본관', x: 8, y: 12, w: 32, h: 30 },
+      { id: 'b-research', name: '연구동', x: 55, y: 9, w: 34, h: 34 },
+      { id: 'b-training', name: '실습동', x: 31, y: 58, w: 36, h: 28 }
+    ];
+
     // 에너지는 예시 12개월 — 여름·겨울이 높은 실제 모양을 따른다
     var base = [128, 119, 105, 96, 108, 142, 176, 181, 149, 103, 111, 133];
     var energy = base.map(function (v, i) {
@@ -826,7 +1157,8 @@
                source: '(예시 자료)' };
     });
 
-    db.equipments = eq; db.consumables = cons; db.history = hist; db.energy = energy;
+    db.equipments = eq; db.consumables = cons; db.history = hist; db.manuals = manuals;
+    db.lawReviews = lawReviews; db.buildings = buildingData; db.energy = energy;
     persist();
   }
 
