@@ -482,8 +482,12 @@
     var e = detailEquipment(), f = $('#detail-manual-form');
     if (!e || !f.reportValidity()) return;
     var meta = {}; $$('[name]', f).forEach(function (i) { meta[i.name] = i.value.trim(); });
-    if (selectedManualFile) {
-      addManualAndAnalyze(e, selectedManualFile, meta.title, meta);
+    /* change 이벤트 상태만 믿지 않고 실제 input의 File도 다시 읽는다.
+     * 자동화 도구·보안 브라우저가 파일을 주입할 때 change 이벤트가 생략돼도 동작한다. */
+    var inputFile = $('#manual-file').files && $('#manual-file').files[0];
+    var manualFile = inputFile || selectedManualFile;
+    if (manualFile) {
+      addManualAndAnalyze(e, manualFile, meta.title, meta);
     } else {
       var o = Object.assign({ id: St.newId('m'), equipmentId: e.id, addedAt: new Date().toISOString(),
         storageStatus: '경로만 저장' }, meta);
