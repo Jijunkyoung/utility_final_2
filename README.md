@@ -95,6 +95,7 @@ node ../hd-04/scripts/probe.mjs /hd-project15/ /hd-project15/energy.html …
 
 저장 자료는 설비·소모품·이력·매뉴얼·법령검토·에너지·건물좌표 컬렉션으로 분리되어 있고,
 예전 v1 JSON을 가져오면 새 컬렉션과 건물 좌표를 자동으로 보완합니다.
+설비를 삭제하면 해당 설비 ID에 연결된 소모품·이력·매뉴얼·법령검토 자료도 확인 후 함께 삭제됩니다.
 
 - 다른 PC 로 옮기려면 → 설비 화면의 **내보내기(JSON)** → 그 PC 에서 **가져오기**
 - 브라우저 기록을 지우면 **자료도 사라집니다.** 주기적으로 내보내 두세요.
@@ -121,7 +122,7 @@ node ../hd-04/scripts/probe.mjs /hd-project15/ /hd-project15/energy.html …
 ## 개발
 
 ```sh
-node test/logic.test.js    # 날짜·법령·저장 마이그레이션·에너지 파싱 검사 (71개)
+node test/logic.test.js    # 날짜·법령·저장 마이그레이션·연결 자료 삭제·에너지 파싱 검사 (74개)
 node test/smoke.browser.js # 일곱 장과 설비 상세 저장 흐름을 실제로 띄운다 (35개)
 python3 build.py           # 페이지 일곱 개를 다시 굽는다
 ```

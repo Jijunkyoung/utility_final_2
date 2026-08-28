@@ -198,6 +198,19 @@ eq(St.forEquipment([
   { equipmentId: 'eq1', name: 'A' }, { equipmentId: 'eq2', name: 'B' }
 ], 'eq1').map(x => x.name), ['A'], '설비 ID 기준으로 관련 데이터를 필터링한다');
 
+const removed = St.removeEquipment({
+  equipments: [{ id: 'eq1' }, { id: 'eq2' }],
+  history: [{ equipmentId: 'eq1' }, { equipmentId: 'eq2' }],
+  consumables: [{ equipmentId: 'eq1' }],
+  manuals: [{ equipmentId: 'eq1' }],
+  lawReviews: [{ equipmentId: 'eq1' }],
+  buildings: [], energy: []
+}, 'eq1');
+eq(removed.equipments.map(x => x.id), ['eq2'], '설비를 삭제한다');
+eq(removed.history.map(x => x.equipmentId), ['eq2'], '  다른 설비 이력은 남긴다');
+ok(['consumables', 'manuals', 'lawReviews'].every(k => removed[k].length === 0),
+   '  연결된 소모품·매뉴얼·법령 기록도 함께 삭제한다');
+
 /* ── ⑥ 에너지 사용량 읽기 ────────────────────────────────────────── */
 
 let g = E.parseUsage(`

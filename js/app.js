@@ -226,11 +226,13 @@
       b.addEventListener('click', function () {
         var e = eqById(b.getAttribute('data-del'));
         if (!e) return;
-        var n = db.history.filter(function (h) { return h.equipmentId === e.id; }).length
-              + db.consumables.filter(function (c) { return c.equipmentId === e.id; }).length;
+        var n = ['history', 'consumables', 'manuals', 'lawReviews'].reduce(function (sum, key) {
+          return sum + St.forEquipment(db[key], e.id).length;
+        }, 0);
         if (!confirm('“' + e.name + '” 을 지웁니다.'
-          + (n ? '\n연결된 이력·소모품 ' + n + '건은 남습니다.' : '') + '\n계속할까요?')) return;
-        db.equipments = db.equipments.filter(function (x) { return x.id !== e.id; });
+          + (n ? '\n연결된 소모품·이력·매뉴얼·법령 기록 ' + n + '건도 함께 삭제됩니다.' : '')
+          + '\n계속할까요?')) return;
+        db = St.removeEquipment(db, e.id);
         if (persist()) renderEquipment();
       });
     });
@@ -480,7 +482,6 @@
       o[i.name] = i.type === 'checkbox' ? i.checked : i.value.trim();
     });
     db.lawReviews.push(o);
-    e.lawCheckedAt = o.checkedAt;
     if (persist()) {
       f.reset(); f.querySelector('[name=checkedAt]').value = today();
       renderDetailLaws(e); renderEquipment();
@@ -515,8 +516,6 @@
     $$('#detail-laws [data-law-del]').forEach(function (b) {
       b.addEventListener('click', function () {
         db.lawReviews = db.lawReviews.filter(function (x) { return x.id !== b.getAttribute('data-law-del'); });
-        var latest = L.latestReview(e.id, db.lawReviews);
-        e.lawCheckedAt = latest ? latest.checkedAt : null;
         if (persist()) { renderDetailLaws(e); renderEquipment(); }
       });
     });
@@ -1034,6 +1033,7 @@
     var t = today();
     sheet(db.equipments.map(function (e) {
       var r = S.nextInspection(e.lastInspect, e.cycleMonths, t);
+      var latestLaw = L.latestReview(e.id, db.lawReviews);
       return {
         설비번호: e.code, 설비명: e.name, 종류: e.kind, 건물: e.building, 설치위치: e.place,
         제조사: e.manufacturer, 모델: e.model, 사양: e.spec, 용량: e.capacity,
@@ -1041,7 +1041,7 @@
         법정선임관리자: e.legalMgr, 유지관리자: e.mgr, 메일: e.mgrEmail,
         마지막검사: e.lastInspect || '', '주기(개월)': e.cycleMonths || '',
         다음검사: r.nextText || '', 상태: r.status,
-        법령확인일: e.lawCheckedAt || '', 비고: e.note,
+        법령확인일: (latestLaw && latestLaw.checkedAt) || e.lawCheckedAt || '', 비고: e.note,
         매뉴얼수: St.forEquipment(db.manuals, e.id).length,
         법령검토수: St.forEquipment(db.lawReviews, e.id).length
       };

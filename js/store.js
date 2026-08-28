@@ -118,9 +118,20 @@
     return (list || []).filter(function (x) { return x.equipmentId === equipmentId; });
   }
 
+  /** 설비와 설비 ID에 매달린 상세 자료를 한 번에 지운다. */
+  function removeEquipment(input, equipmentId) {
+    var d = normalize(input);
+    d.equipments = d.equipments.filter(function (x) { return x.id !== equipmentId; });
+    ['history', 'consumables', 'manuals', 'lawReviews'].forEach(function (key) {
+      d[key] = d[key].filter(function (x) { return x.equipmentId !== equipmentId; });
+    });
+    return d;
+  }
+
   return {
     KEY: KEY, SCHEMA_VERSION: SCHEMA_VERSION, EMPTY: EMPTY,
     load: load, save: save, normalize: normalize, newId: newId,
-    reset: reset, forEquipment: forEquipment, buildingId: buildingId
+    reset: reset, forEquipment: forEquipment, removeEquipment: removeEquipment,
+    buildingId: buildingId
   };
 });
