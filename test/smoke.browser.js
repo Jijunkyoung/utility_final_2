@@ -165,7 +165,21 @@ function serve(port) {
     await page.setInputFiles('#manual-file', { name: 'manual.txt', mimeType: 'text/plain',
       buffer: Buffer.from('흡입 필터는 6개월마다 교체한다. 안전밸브는 12개월마다 검사한다.', 'utf8') });
     await page.click('#detail-manual-save');
-    await page.waitForSelector('#detail-manual-analysis .analysis-card', { timeout: 8000 });
+    try {
+      await page.waitForSelector('#detail-manual-analysis .analysis-card', { timeout: 8000 });
+    } catch (manualError) {
+      var manualDiag = await page.evaluate(function () {
+        var db = Store.load(), input = document.querySelector('#manual-file');
+        return {
+          selectedFiles: input && input.files ? input.files.length : -1,
+          status: (document.querySelector('#manual-status') || {}).textContent || '',
+          analysisHtml: (document.querySelector('#detail-manual-analysis') || {}).innerHTML || '',
+          manuals: (db.manuals || []).slice(-3)
+        };
+      });
+      throw new Error('매뉴얼 분석 진단: ' + JSON.stringify(manualDiag)
+        + ' | 브라우저 오류: ' + errors.slice(-4).join(' | ') + ' | ' + manualError.message);
+    }
     ok(await page.locator('#detail-manual-analysis .analysis-card').count() > 0,
        '업로드한 매뉴얼을 분석해 요약을 표시한다');
     ok((await page.textContent('#detail-manual-analysis')).indexOf('6개월') >= 0
