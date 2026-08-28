@@ -16,6 +16,8 @@
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
 
+  var CHART_KINDS = ['전력', '수도', '가스', '압축공기'];
+
   /** '125,400' → 125400 · 못 읽으면 null */
   function num(s) {
     if (s == null) return null;
@@ -165,5 +167,8 @@
     return g;
   }
 
-  return { parseUsage: parseUsage, withDelta: withDelta, groupByKind: groupByKind, num: num };
+  return {
+    CHART_KINDS: CHART_KINDS,
+    parseUsage: parseUsage, withDelta: withDelta, groupByKind: groupByKind, num: num
+  };
 });

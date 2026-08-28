@@ -123,8 +123,8 @@ node ../hd-04/scripts/probe.mjs /hd-project15/ /hd-project15/energy.html …
 ## 개발
 
 ```sh
-node test/logic.test.js    # 날짜·법령·저장 마이그레이션·연결 자료 삭제·에너지 파싱 검사 (79개)
-node test/smoke.browser.js # 일곱 장과 설비 등록·상세 저장 흐름을 실제로 띄운다 (39개)
+node test/logic.test.js    # 날짜·법령·저장 마이그레이션·연결 자료 삭제·에너지 파싱 검사 (80개)
+node test/smoke.browser.js # 일곱 장과 에너지 4개 그래프를 실제로 띄운다 (40개)
 python3 build.py           # 페이지 일곱 개를 다시 굽는다
 ```
 

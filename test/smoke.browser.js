@@ -211,7 +211,10 @@ function serve(port) {
     await go('energy.html');
     ok(await page.locator('#energy-table tbody tr').count() > 0, '에너지 표에 줄이 있다');
     var svg = await page.locator('#charts svg').count();
-    ok(svg > 0, '그래프를 SVG 로 직접 그린다 (' + svg + '개)');
+    ok(svg === 4, '전력·수도·가스·압축공기 그래프 네 개를 SVG 로 그린다 (' + svg + '개)');
+    var chartTitles = await page.locator('#charts .energy-chart h3').allTextContents();
+    ok(chartTitles.map(function (t) { return t.replace(/\s*\(.*/, ''); }).join('|') === '전력|수도|가스|압축공기',
+       '기타 없이 네 종류 그래프만 정해진 순서로 보인다');
     ok(await page.isVisible('#drop'), '고지서를 끌어다 놓는 자리가 보인다');
 
     group('8. 조감도 — 건물을 눌러 그 건물 설비 보기');

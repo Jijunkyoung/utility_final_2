@@ -920,15 +920,11 @@
   function renderEnergy() {
     $('#energy-xlsx').disabled = !energyRows.length;
     var groups = E.groupByKind(energyRows);
-    var preferred = ['전력', '수도', '가스', '압축공기', '열', '기타'];
-    var kinds = Object.keys(groups).sort(function (a, b) {
-      var ai = preferred.indexOf(a), bi = preferred.indexOf(b);
-      return (ai < 0 ? 99 : ai) - (bi < 0 ? 99 : bi) || a.localeCompare(b, 'ko');
-    });
+    var kinds = E.CHART_KINDS.slice();
 
-    $('#charts').innerHTML = kinds.length ? kinds.map(function (k) {
-      return chartSvg(k, E.withDelta(groups[k]));
-    }).join('') : '<p class="sub">아직 읽어 온 사용량이 없습니다.</p>';
+    $('#charts').innerHTML = kinds.map(function (k) {
+      return chartSvg(k, E.withDelta(groups[k] || []));
+    }).join('');
 
     var all = [];
     kinds.forEach(function (k) { all = all.concat(E.withDelta(groups[k])); });
@@ -956,8 +952,9 @@
   function chartSvg(kind, rows) {
     var W = 900, H = 240, padL = 64, padR = 16, padT = 18, padB = 44;
     var max = Math.max.apply(null, rows.map(function (r) { return r.usage; }).concat([1]));
-    var bw = (W - padL - padR) / rows.length;
-    var colors = { '전력': '#0b6e99', '수도': '#2374c6', '가스': '#d87917', '압축공기': '#6b4fc5', '열': '#c64c3c', '기타': '#667482' };
+    var bw = (W - padL - padR) / Math.max(rows.length, 1);
+    var colors = { '전력': '#0b6e99', '수도': '#2374c6', '가스': '#d87917', '압축공기': '#6b4fc5' };
+    var units = { '전력': 'kWh', '수도': 'm³', '가스': 'Nm³', '압축공기': 'Nm³' };
     var color = colors[kind] || '#0b6e99';
     var bars = rows.map(function (r, i) {
       var h = (H - padT - padB) * (r.usage / max);
@@ -978,12 +975,15 @@
         + '" text-anchor="end" font-size="10.5" fill="#5b6b7b">'
         + Math.round(max * f).toLocaleString('ko-KR') + '</text>';
     }).join('');
-    var unit = rows[0] && rows[0].unit ? ' (' + rows[0].unit + ')' : '';
+    var empty = rows.length ? '' : '<text x="' + ((padL + W - padR) / 2) + '" y="125" '
+      + 'text-anchor="middle" font-size="14" fill="#7a8998">등록된 사용량이 없습니다</text>';
+    var unitName = rows[0] && rows[0].unit ? rows[0].unit : units[kind];
+    var unit = unitName ? ' (' + unitName + ')' : '';
     return '<div class="card energy-chart"><h3 style="font-size:15.5px;margin-bottom:8px">'
       + esc(kind) + esc(unit) + '</h3>'
       + '<div style="overflow-x:auto"><svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" '
       + 'style="min-width:520px;display:block" role="img" aria-label="' + esc(kind) + ' 월별 사용량">'
-      + ticks + bars + '</svg></div></div>';
+      + ticks + bars + empty + '</svg></div></div>';
   }
 
   /* ═══════════════════════════════════════════════════ 조감도 */
@@ -1103,7 +1103,7 @@
     if (!energyRows.length) { alert('내보낼 사용량이 없습니다.'); return; }
     var groups = E.groupByKind(energyRows);
     var all = [];
-    Object.keys(groups).forEach(function (k) { all = all.concat(E.withDelta(groups[k])); });
+    E.CHART_KINDS.forEach(function (k) { all = all.concat(E.withDelta(groups[k] || [])); });
     all.sort(function (a, b) { return a.ym < b.ym ? -1 : a.ym > b.ym ? 1 : 0; });
     sheet(all.map(function (r) {
       return {
@@ -1187,12 +1187,20 @@
       { id: 'b-training', name: '실습동', x: 31, y: 58, w: 36, h: 28 }
     ];
 
-    // 에너지는 예시 12개월 — 여름·겨울이 높은 실제 모양을 따른다
-    var base = [128, 119, 105, 96, 108, 142, 176, 181, 149, 103, 111, 133];
-    var energy = base.map(function (v, i) {
-      return { ym: (y - 1) + '-' + String(i + 1).padStart(2, '0'), year: y - 1, month: i + 1,
-               kind: '전력', usage: v * 1000, unit: 'kWh', cost: Math.round(v * 1000 * 146),
-               source: '(예시 자료)' };
+    // 네 종류를 같은 12개월 축으로 비교할 수 있는 예시 자료
+    var series = [
+      { kind: '전력', unit: 'kWh', values: [128,119,105,96,108,142,176,181,149,103,111,133], scale: 1000, price: 146 },
+      { kind: '수도', unit: 'm³', values: [920,870,890,910,940,1010,1080,1120,1040,960,930,950], scale: 1, price: 1150 },
+      { kind: '가스', unit: 'Nm³', values: [18400,16200,12100,7600,4200,2600,2200,2400,3900,7800,13200,17600], scale: 1, price: 980 },
+      { kind: '압축공기', unit: 'Nm³', values: [820,790,840,810,850,900,920,910,880,860,830,800], scale: 1000, price: 18 }
+    ];
+    var energy = [];
+    series.forEach(function (s) {
+      s.values.forEach(function (v, i) {
+        var usage = v * s.scale;
+        energy.push({ ym: (y - 1) + '-' + String(i + 1).padStart(2, '0'), year: y - 1, month: i + 1,
+          kind: s.kind, usage: usage, unit: s.unit, cost: Math.round(usage * s.price), source: '(예시 자료)' });
+      });
     });
 
     db.equipments = eq; db.consumables = cons; db.history = hist; db.manuals = manuals;
