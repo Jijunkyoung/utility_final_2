@@ -49,43 +49,12 @@
 </div></header>
 
 <main><div class="wrap">
-<div class="card">
-  <h3 style="font-size:16px;margin-bottom:10px">설비 등록</h3>
-  <form id="eq-form" class="grid-form">
-    <label>설비번호 <input name="code" required placeholder="U-EL-01"></label>
-    <label>설비명 <input name="name" required placeholder="본관 승객용 승강기 1호기"></label>
-    <label>종류
-      <select name="kind" id="kind"></select>
-    </label>
-    <label>건물 <input name="building" placeholder="본관" list="bldg-list"><datalist id="bldg-list"></datalist></label>
-	    <label>설치위치 <input name="place" placeholder="지하 1층 기계실"></label>
-	    <label>제조사 <input name="manufacturer" placeholder="제조사"></label>
-	    <label>모델 <input name="model" placeholder="모델명"></label>
-	    <label>사양 <input name="spec" placeholder="15인승 / 1.0 m/s / 11.5 kW"></label>
-	    <label>용량 <input name="capacity" placeholder="1.5 t/h / 300 RT"></label>
-    <label>유량 <input name="flow" placeholder="—"></label>
-    <label>압력 <input name="pressure" placeholder="—"></label>
-    <label>소모전력 <input name="power" placeholder="11.5 kW"></label>
-	    <label>냉난방용량 <input name="hvac" placeholder="—"></label>
-	    <label>설치일 <input name="installedAt" type="date"></label>
-    <label>법정선임관리자 <input name="legalMgr" placeholder="이름 / 연락처"></label>
-    <label>유지관리자 <input name="mgr" placeholder="이름 / 연락처"></label>
-    <label>유지관리자 메일 <input name="mgrEmail" type="email" placeholder="name@company.com"></label>
-    <label>마지막 법정검사 <input name="lastInspect" type="date"></label>
-    <label>검사 주기(개월) <input name="cycleMonths" type="number" min="1" step="1" placeholder="12"></label>
-    <label>검사 비용(원) <input name="inspectCost" type="number" min="0" step="1000" placeholder="—"></label>
-    <label>법령 확인일 <input name="lawCheckedAt" type="date"></label>
-	    <label style="grid-column:1/-1">비고 <input name="note" placeholder="운전 조건, 특이사항 등"></label>
-  </form>
-  <div id="law-hint"></div>
-  <div class="btnrow">
-    <button class="btn primary" id="eq-save">등록</button>
-    <button class="btn" id="eq-clear" type="button">입력 지우기</button>
-  </div>
+<div class="section-toolbar">
+  <div><h2>설비 목록 <span class="sub" id="eq-count"></span></h2>
+    <p class="sub">설비를 선택하면 사양·소모품·이력·매뉴얼·법령을 한 번에 관리할 수 있습니다.</p></div>
+  <button class="btn primary" id="eq-create-open" type="button">+ 설비 등록</button>
 </div>
-
-<h2>설비 목록 <span class="sub" id="eq-count"></span></h2>
-<div class="btnrow" style="margin-top:0;margin-bottom:12px">
+<div class="btnrow equipment-tools">
   <button class="btn" id="export">내보내기 (JSON)</button>
   <label class="btn" for="import-file">가져오기</label>
   <input type="file" id="import-file" accept=".json">
@@ -95,6 +64,41 @@
 	  <thead><tr><th>관리</th><th>설비번호</th><th>설비명</th><th>종류</th><th>건물</th><th>위치</th>
 	    <th>사양</th><th>유지관리자</th><th>마지막 검사</th><th>주기</th><th>법령 확인일</th></tr></thead>
 	  <tbody></tbody></table></div>
+
+  <dialog id="eq-create" class="register-dialog" aria-labelledby="eq-create-title">
+    <div class="register-head">
+      <div><p class="sub">신규 설비</p><h2 id="eq-create-title">설비 등록</h2></div>
+      <button class="btn" id="eq-create-close" type="button" aria-label="설비 등록 닫기">닫기</button>
+    </div>
+    <form id="eq-form" class="register-form">
+      <div class="register-row"><label for="eq-code">설비번호</label><input id="eq-code" name="code" required placeholder="U-EL-01"></div>
+      <div class="register-row"><label for="eq-name">설비명</label><input id="eq-name" name="name" required placeholder="본관 승객용 승강기 1호기"></div>
+      <div class="register-row"><label for="kind">종류</label><div class="register-control"><select name="kind" id="kind" required></select><input id="kind-other" placeholder="기타 설비 종류를 입력하세요" hidden></div></div>
+      <div class="register-row"><label for="eq-model">모델명</label><input id="eq-model" name="model" placeholder="모델명"></div>
+      <div class="register-row"><label for="eq-manufacturer">제조사</label><input id="eq-manufacturer" name="manufacturer" placeholder="제조사"></div>
+      <div class="register-row"><label for="eq-capacity">용량</label><input id="eq-capacity" name="capacity" placeholder="1.5 t/h / 300 RT"></div>
+      <div class="register-row"><label for="eq-flow">유량</label><input id="eq-flow" name="flow" placeholder="120 ㎥/h"></div>
+      <div class="register-row"><label for="eq-pressure">압력</label><input id="eq-pressure" name="pressure" placeholder="0.98 MPa"></div>
+      <div class="register-row"><label for="eq-power">소모전력</label><input id="eq-power" name="power" placeholder="11.5 kW"></div>
+      <div class="register-row"><label for="eq-hvac">냉난방능력</label><input id="eq-hvac" name="hvac" placeholder="냉방 300 RT"></div>
+      <div class="register-row"><label for="eq-spec">기타사양</label><input id="eq-spec" name="spec" placeholder="운전 조건, 규격 등"></div>
+      <div class="register-row"><label for="eq-building">위치</label><input id="eq-building" name="building" placeholder="본관" list="bldg-list"><datalist id="bldg-list"></datalist></div>
+      <div class="register-row"><label for="eq-place">세부위치</label><input id="eq-place" name="place" placeholder="지하 1층 기계실"></div>
+      <div class="register-row"><label for="eq-installed">설치일</label><input id="eq-installed" name="installedAt" type="date"></div>
+      <div class="register-row"><label for="eq-legal-mgr">법정선임관리자</label><input id="eq-legal-mgr" name="legalMgr" placeholder="이름 / 연락처"></div>
+      <div class="register-row"><label for="eq-mgr">유지관리자</label><input id="eq-mgr" name="mgr" placeholder="이름 / 연락처"></div>
+      <div class="register-row"><label for="eq-mgr-email">유지관리자 메일</label><input id="eq-mgr-email" name="mgrEmail" type="email" placeholder="name@company.com"></div>
+      <div class="register-row"><label for="eq-last-inspect">법정검사</label><input id="eq-last-inspect" name="lastInspect" type="date"></div>
+      <div class="register-row"><label for="eq-cycle">검사주기</label><div class="input-with-unit"><input id="eq-cycle" name="cycleMonths" type="number" min="1" step="1" placeholder="12"><span>개월</span></div></div>
+      <div class="register-row"><label for="eq-cost">검사비용</label><div class="input-with-unit"><input id="eq-cost" name="inspectCost" type="number" min="0" step="1000" placeholder="0"><span>원</span></div></div>
+      <div class="register-row"><label for="eq-law-date">법령 확인일</label><input id="eq-law-date" name="lawCheckedAt" type="date"></div>
+    </form>
+    <div id="law-hint"></div>
+    <div class="register-actions">
+      <button class="btn" id="eq-clear" type="button">입력 지우기</button>
+      <button class="btn primary" id="eq-save" type="button">설비 등록</button>
+    </div>
+  </dialog>
 
 	<dialog id="eq-detail" class="detail-dialog" aria-labelledby="detail-title">
 	  <div class="detail-head">

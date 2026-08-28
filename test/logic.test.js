@@ -227,6 +227,23 @@ eq(g.rows[0].ym, '2026-03', 'YYYY-MM 형식도 읽는다');
 eq(g.rows[0].unit, 'm3', '단위를 그대로 둔다');
 eq(g.rows[0].cost, null, '요금이 없으면 0 이 아니라 null');
 
+g = E.parseUsage('2026년 7월 전력 사용량 98,700 kWh');
+eq(g.rows[0].ym, '2026-07', '1월이 없어도 7월 한 달만 읽는다');
+
+g = E.parseUsage('2026년 전기요금 고지서\n청구월 7월\n사용량 88,400 kWh');
+eq(g.rows[0].ym, '2026-07', '연도와 월·사용량이 다른 줄이어도 조합한다');
+
+g = E.parseUsage(`
+2026년 7월 수도 사용량 1,200 m3
+2026년 7월 도시가스 사용량 3,400 Nm3
+2026년 7월 압축공기 사용량 8,900 Nm3
+`);
+eq(g.rows.length, 3, '같은 달의 서로 다른 에너지 종류를 모두 남긴다');
+eq(g.rows.map(r => r.kind).sort(), ['가스', '수도', '압축공기'].sort(),
+   '수도·가스·압축공기를 기타가 아닌 별도 종류로 나눈다');
+eq(Object.keys(E.groupByKind(g.rows)).sort(), ['가스', '수도', '압축공기'].sort(),
+   '수도·가스·압축공기가 각각 별도 그래프 묶음이 된다');
+
 g = E.parseUsage('아무 숫자도 없는 글');
 eq(g.rows.length, 0, '못 읽으면 빈 배열');
 ok(g.note.length > 0, '  왜 못 읽었는지 알린다');

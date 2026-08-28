@@ -133,8 +133,34 @@
     kindSel.innerHTML = '<option value="">— 고르세요 —</option>'
       + L.KINDS.map(function (k) { return '<option>' + esc(k) + '</option>'; }).join('');
 
-    kindSel.addEventListener('change', showLawHint);
-    showLawHint();
+    function syncOtherKind(focus) {
+      var input = $('#kind-other');
+      var on = kindSel.value === '기타';
+      input.hidden = !on;
+      input.required = on;
+      if (!on) input.value = '';
+      if (on && focus) input.focus();
+      showLawHint();
+    }
+
+    function closeCreateDialog() {
+      var dialog = $('#eq-create');
+      if (dialog.close) dialog.close(); else dialog.removeAttribute('open');
+    }
+
+    kindSel.addEventListener('change', function () { syncOtherKind(true); });
+    syncOtherKind(false);
+
+    $('#eq-create-open').addEventListener('click', function () {
+      var dialog = $('#eq-create');
+      if (dialog.showModal) dialog.showModal(); else dialog.setAttribute('open', '');
+      document.body.classList.add('register-open');
+      $('#eq-code').focus();
+    });
+    $('#eq-create-close').addEventListener('click', closeCreateDialog);
+    $('#eq-create').addEventListener('close', function () {
+      document.body.classList.remove('register-open');
+    });
 
     $('#eq-save').addEventListener('click', function (ev) {
       ev.preventDefault();
@@ -142,6 +168,7 @@
       if (!f.reportValidity()) return;
       var o = { id: St.newId('eq') };
       $$('#eq-form [name]').forEach(function (i) { o[i.name] = i.value.trim(); });
+      if (o.kind === '기타') o.kind = $('#kind-other').value.trim();
       // 숫자로 둘 것만 숫자로. 빈 값은 null 로 둔다 — 0 으로 두면 "주기 0" 이 되어
       // "주기 없음" 과 구분이 안 된다.
       ['cycleMonths', 'inspectCost'].forEach(function (k) {
@@ -149,9 +176,11 @@
       });
       ensureBuilding(o.building);
       db.equipments.push(o);
-      if (persist()) { f.reset(); showLawHint(); renderEquipment(); }
+      if (persist()) {
+        f.reset(); syncOtherKind(false); renderEquipment(); closeCreateDialog();
+      }
     });
-    $('#eq-clear').addEventListener('click', function () { $('#eq-form').reset(); showLawHint(); });
+    $('#eq-clear').addEventListener('click', function () { $('#eq-form').reset(); syncOtherKind(false); });
 
     $('#export').addEventListener('click', exportJson);
     $('#import-file').addEventListener('change', importJson);
@@ -304,30 +333,33 @@
   }
 
   function renderDetailBasic(e) {
-    var kindOptions = '<option value="">— 고르세요 —</option>' + L.KINDS.map(function (k) {
+    var customKind = e.kind && L.KINDS.indexOf(e.kind) < 0
+      ? '<option value="' + esc(e.kind) + '" selected>기타: ' + esc(e.kind) + '</option>' : '';
+    var kindOptions = '<option value="">— 고르세요 —</option>' + customKind + L.KINDS.map(function (k) {
       return '<option' + (e.kind === k ? ' selected' : '') + '>' + esc(k) + '</option>';
     }).join('');
     $('#detail-basic-form').innerHTML =
         field('설비번호', 'code', e.code, 'text', ' required')
       + field('설비명', 'name', e.name, 'text', ' required')
       + '<label>종류 <select name="kind">' + kindOptions + '</select></label>'
-      + field('건물', 'building', e.building)
-      + field('설치위치', 'place', e.place)
+      + field('모델명', 'model', e.model)
       + field('제조사', 'manufacturer', e.manufacturer)
-      + field('모델', 'model', e.model)
-      + field('사양', 'spec', e.spec)
       + field('용량', 'capacity', e.capacity)
       + field('유량', 'flow', e.flow)
       + field('압력', 'pressure', e.pressure)
       + field('소모전력', 'power', e.power)
-      + field('냉난방용량', 'hvac', e.hvac)
+      + field('냉난방능력', 'hvac', e.hvac)
+      + field('기타사양', 'spec', e.spec)
+      + field('위치', 'building', e.building)
+      + field('세부위치', 'place', e.place)
       + field('설치일', 'installedAt', e.installedAt, 'date')
       + field('법정선임관리자', 'legalMgr', e.legalMgr)
       + field('유지관리자', 'mgr', e.mgr)
       + field('유지관리자 메일', 'mgrEmail', e.mgrEmail, 'email')
-      + field('마지막 법정검사', 'lastInspect', e.lastInspect, 'date')
-      + field('검사 주기(개월)', 'cycleMonths', e.cycleMonths, 'number', ' min="1" step="1"')
-      + field('검사 비용(원)', 'inspectCost', e.inspectCost, 'number', ' min="0" step="1000"')
+      + field('법정검사', 'lastInspect', e.lastInspect, 'date')
+      + field('검사주기(개월)', 'cycleMonths', e.cycleMonths, 'number', ' min="1" step="1"')
+      + field('검사비용(원)', 'inspectCost', e.inspectCost, 'number', ' min="0" step="1000"')
+      + field('법령 확인일', 'lawCheckedAt', e.lawCheckedAt, 'date')
       + field('비고', 'note', e.note);
   }
 
@@ -888,7 +920,11 @@
   function renderEnergy() {
     $('#energy-xlsx').disabled = !energyRows.length;
     var groups = E.groupByKind(energyRows);
-    var kinds = Object.keys(groups);
+    var preferred = ['전력', '수도', '가스', '압축공기', '열', '기타'];
+    var kinds = Object.keys(groups).sort(function (a, b) {
+      var ai = preferred.indexOf(a), bi = preferred.indexOf(b);
+      return (ai < 0 ? 99 : ai) - (bi < 0 ? 99 : bi) || a.localeCompare(b, 'ko');
+    });
 
     $('#charts').innerHTML = kinds.length ? kinds.map(function (k) {
       return chartSvg(k, E.withDelta(groups[k]));
@@ -921,11 +957,13 @@
     var W = 900, H = 240, padL = 64, padR = 16, padT = 18, padB = 44;
     var max = Math.max.apply(null, rows.map(function (r) { return r.usage; }).concat([1]));
     var bw = (W - padL - padR) / rows.length;
+    var colors = { '전력': '#0b6e99', '수도': '#2374c6', '가스': '#d87917', '압축공기': '#6b4fc5', '열': '#c64c3c', '기타': '#667482' };
+    var color = colors[kind] || '#0b6e99';
     var bars = rows.map(function (r, i) {
       var h = (H - padT - padB) * (r.usage / max);
       var x = padL + i * bw + bw * 0.15, y = H - padB - h, w = bw * 0.7;
       return '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + w.toFixed(1)
-        + '" height="' + Math.max(h, 1).toFixed(1) + '" fill="#0b6e99" rx="3">'
+        + '" height="' + Math.max(h, 1).toFixed(1) + '" fill="' + color + '" rx="3">'
         + '<title>' + esc(r.ym + ' · ' + r.usage.toLocaleString('ko-KR') + ' ' + r.unit) + '</title></rect>'
         + '<text x="' + (x + w / 2).toFixed(1) + '" y="' + (H - padB + 15)
         + '" text-anchor="middle" font-size="10.5" fill="#5b6b7b">' + esc(r.ym.slice(2)) + '</text>'
@@ -941,7 +979,7 @@
         + Math.round(max * f).toLocaleString('ko-KR') + '</text>';
     }).join('');
     var unit = rows[0] && rows[0].unit ? ' (' + rows[0].unit + ')' : '';
-    return '<div class="card"><h3 style="font-size:15.5px;margin-bottom:8px">'
+    return '<div class="card energy-chart"><h3 style="font-size:15.5px;margin-bottom:8px">'
       + esc(kind) + esc(unit) + '</h3>'
       + '<div style="overflow-x:auto"><svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" '
       + 'style="min-width:520px;display:block" role="img" aria-label="' + esc(kind) + ' 월별 사용량">'

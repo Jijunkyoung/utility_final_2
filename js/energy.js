@@ -26,18 +26,48 @@
   }
 
   // 흔한 단위. 대소문자를 가리지 않는다.
-  var UNIT = /(kWh|MWh|Nm3|m3|㎥|Gcal|MJ|TOE|톤|ton|L|㎘)/i;
+  var UNIT = /(kWh|MWh|Nm3|N㎥|m3|m³|㎥|Gcal|MJ|TOE|톤|ton|L|㎘)/i;
 
   // 연월 — '2026년 1월' · '2026-01' · '2026.01'
   var YM = /(\d{4})\s*(?:년|[-./])\s*(\d{1,2})\s*월?/;
+  var MONTH = /(\d{1,2})\s*월(?:분)?/;
 
   /** 사용량 앞뒤에 붙는 낱말로 종류를 짐작한다 */
   function guessKind(line) {
+    if (/압축\s*공기|압공|콤프레[서샤]|compress(?:ed)?\s*air/i.test(line)) return '압축공기';
     if (/전력|전기|kwh|mwh/i.test(line)) return '전력';
-    if (/가스|lng|도시가스|nm3/i.test(line)) return '가스';
+    if (/가스|lng|도시가스/i.test(line)) return '가스';
     if (/수도|용수|상수/i.test(line)) return '수도';
     if (/열|스팀|증기|gcal/i.test(line)) return '열';
     return '기타';
+  }
+
+  function documentYear(text) {
+    var years = String(text || '').match(/(?:19|20)\d{2}/g) || [];
+    for (var i = 0; i < years.length; i++) {
+      var y = Number(years[i]);
+      if (y >= 1990 && y <= 2100) return y;
+    }
+    return null;
+  }
+
+  /** 날짜 줄과 사용량 줄이 PDF 표에서 갈라져도 가까운 두 줄까지 함께 읽는다. */
+  function nearby(lines, index) {
+    var parts = [lines[index]];
+    for (var i = index + 1; i < lines.length && i <= index + 2; i++) {
+      var next = lines[i].replace(/\s+/g, ' ').trim();
+      if (!next) continue;
+      if (YM.test(next) || MONTH.test(next)) break;
+      parts.push(next);
+    }
+    return parts.join(' ');
+  }
+
+  function usageFrom(text) {
+    var byUnit = new RegExp('(-?[\\d,]+(?:\\.\\d+)?)\\s*' + UNIT.source, 'i').exec(text);
+    if (byUnit) return { usage: num(byUnit[1]), unit: byUnit[2] || '' };
+    var byLabel = /(?:사용량|당월사용|검침량|사용)[^\d-]{0,16}(-?[\d,]+(?:\.\d+)?)/i.exec(text);
+    return byLabel ? { usage: num(byLabel[1]), unit: '' } : null;
   }
 
   /**
@@ -45,58 +75,61 @@
    * @returns {{rows:Array, note:string, skipped:number}}
    */
   function parseUsage(text) {
-    var lines = String(text || '').split(/\r?\n/);
-    var byYm = {};           // 같은 달이 두 번 나오면 나중 것이 이긴다 (재발행 고지서)
+    var sourceText = String(text || '');
+    var lines = sourceText.split(/\r?\n/);
+    var fallbackYear = documentYear(sourceText);
+    var byYm = {};           // 같은 달·같은 종류가 두 번 나오면 나중 것이 이긴다
     var order = [];
     var looked = 0, skipped = 0;
 
-    lines.forEach(function (raw) {
+    lines.forEach(function (raw, lineIndex) {
       var line = raw.replace(/\s+/g, ' ').trim();
       if (!line) return;
       var ym = YM.exec(line);
-      if (!ym) return;
+      var monthOnly = ym ? null : MONTH.exec(line);
+      if (!ym && (!monthOnly || !fallbackYear)) return;
       looked++;
 
-      var y = +ym[1], mo = +ym[2];
+      var y = ym ? +ym[1] : fallbackYear;
+      var mo = ym ? +ym[2] : +monthOnly[1];
       if (mo < 1 || mo > 12) { skipped++; return; }        // 13월은 버린다
       if (y < 1990 || y > 2100) { skipped++; return; }
 
-      // 연월 뒤쪽에서 숫자를 찾는다 — 앞쪽 숫자는 연월 자신이다
-      var rest = line.slice(ym.index + ym[0].length);
-      var nums = rest.match(/-?[\d,]+(?:\.\d+)?/g) || [];
-      if (!nums.length) { skipped++; return; }
+      var context = nearby(lines, lineIndex);
+      var found = usageFrom(context);
+      if (!found || found.usage === null) { skipped++; return; }
 
-      var usage = num(nums[0]);
-      if (usage === null) { skipped++; return; }
-
-      var u = UNIT.exec(rest);
       // 두 번째 숫자가 요금인지 본다 — '요금'·'원'·'금액' 이 붙어 있어야 인정한다.
       // 아무 숫자나 요금으로 잡으면 계약전력·역률 같은 것이 요금으로 들어간다.
       var cost = null;
-      var costM = /(?:요금|금액|청구|합계)[^\d-]{0,6}(-?[\d,]+)|(-?[\d,]+)\s*원/.exec(rest);
+      var costM = /(?:요금|금액|청구|합계)[^\d-]{0,10}(-?[\d,]+)|(-?[\d,]+)\s*원/.exec(context);
       if (costM) cost = num(costM[1] || costM[2]);
 
-      var key = y + '-' + String(mo).padStart(2, '0');
+      var keyYm = y + '-' + String(mo).padStart(2, '0');
+      var kind = guessKind(context);
+      var key = keyYm + '|' + kind;
       if (!(key in byYm)) order.push(key);
       byYm[key] = {
-        ym: key, year: y, month: mo,
-        kind: guessKind(line),
-        usage: usage,
-        unit: u ? u[1] : '',
+        ym: keyYm, year: y, month: mo,
+        kind: kind,
+        usage: found.usage,
+        unit: found.unit,
         cost: cost,                 // 없으면 null — 0 이 아니다
-        source: line.slice(0, 120)
+        source: context.slice(0, 160)
       };
     });
 
     var rows = order.map(function (k) { return byYm[k]; })
-                    .sort(function (a, b) { return a.ym < b.ym ? -1 : a.ym > b.ym ? 1 : 0; });
+                    .sort(function (a, b) {
+                      return a.ym < b.ym ? -1 : a.ym > b.ym ? 1 : a.kind.localeCompare(b.kind, 'ko');
+                    });
 
     var note = '';
     if (!rows.length) {
       note = looked
         ? '연월은 찾았지만 사용량 숫자를 읽지 못했습니다 (' + looked + '줄). '
           + '표가 이미지로 된 PDF 일 수 있습니다 — 이 경우 글자가 아니라 그림이라 읽을 수 없습니다.'
-        : '연월(예: 2026년 1월)이 있는 줄을 찾지 못했습니다. 다른 양식이거나 스캔본일 수 있습니다.';
+        : '연월(예: 2026년 7월 또는 7월)과 사용량을 찾지 못했습니다. 다른 양식이거나 스캔본일 수 있습니다.';
     } else if (skipped) {
       note = rows.length + '개월을 읽었고 ' + skipped + '줄은 건너뛰었습니다.';
     }
@@ -120,7 +153,15 @@
   /** 종류별로 나눈다 — 전력과 가스를 한 축에 그리면 단위가 달라 뜻이 없다 */
   function groupByKind(rows) {
     var g = {};
-    (rows || []).forEach(function (r) { (g[r.kind] = g[r.kind] || []).push(r); });
+    (rows || []).forEach(function (r) {
+      var kind = r.kind === '기타' ? guessKind(r.source || '') : r.kind;
+      var copy = {}; for (var k in r) copy[k] = r[k];
+      copy.kind = kind;
+      (g[kind] = g[kind] || []).push(copy);
+    });
+    Object.keys(g).forEach(function (kind) {
+      g[kind].sort(function (a, b) { return a.ym < b.ym ? -1 : a.ym > b.ym ? 1 : 0; });
+    });
     return g;
   }
 

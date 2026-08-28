@@ -2,7 +2,7 @@
  *
  *   node test/smoke.browser.js
  *
- * 규칙 테스트(test/logic.test.js)가 61개 전부 통과해도 app.js 의 오타 하나면
+ * 규칙 테스트(test/logic.test.js)가 전부 통과해도 app.js 의 오타 하나면
  * 페이지가 빈 화면이 된다. 규칙은 맞는데 아무도 그것을 볼 수 없는 상태다.
  * 파일을 읽어서는 안 잡힌다 — 실제로 띄워 봐야 잡힌다.
  *
@@ -119,6 +119,17 @@ function serve(port) {
     ok((await page.textContent('#eq-count')).indexOf('0건') < 0,
        '설비 목록에 건수가 나온다 (' + (await page.textContent('#eq-count')).trim() + ')');
     ok(await page.locator('#eq-table tbody tr').count() > 0, '설비 표에 줄이 있다');
+    ok(await page.isVisible('#eq-create-open'), '설비 등록은 목록 위 버튼으로 보인다');
+    await page.click('#eq-create-open');
+    ok(await page.isVisible('#eq-create'), '설비 등록 버튼을 누르면 입력 창이 열린다');
+    var registrationLabels = await page.locator('#eq-form .register-row>label').allTextContents();
+    ok(registrationLabels.join('|') === [
+      '설비번호','설비명','종류','모델명','제조사','용량','유량','압력','소모전력','냉난방능력',
+      '기타사양','위치','세부위치','설치일','법정선임관리자','유지관리자','유지관리자 메일',
+      '법정검사','검사주기','검사비용','법령 확인일'
+    ].join('|'), '설비 등록 항목이 요청 순서대로 한 줄씩 나온다');
+    await page.selectOption('#kind', '기타');
+    ok(await page.isVisible('#kind-other'), '종류가 기타이면 직접 입력 칸이 열린다');
 
     /* 이 저장소의 중심 규칙이다. 종류를 고르면 법령은 나오되
      * **주기 숫자를 주지 않는다.** 주면 아무도 다시 확인하지 않는다. */
@@ -131,6 +142,7 @@ function serve(port) {
        '주기를 알려 주지 않는다고 분명히 적는다', hint.slice(0, 160));
     ok(!/\d+\s*개월마다|\d+\s*년마다|주기\s*[:：]\s*\d/.test(hint),
        '법령 안내에 주기 숫자를 지어내지 않는다', hint.slice(0, 160));
+    await page.click('#eq-create-close');
 
     group('3-1. 설비 상세 — 다섯 탭이 같은 설비 ID 자료를 저장한다');
     await page.locator('#eq-table [data-detail]').first().click();
