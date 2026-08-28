@@ -26,7 +26,9 @@
     energy: [],       // 에너지 사용량
     buildings: [],    // {id,name,x,y,w,h} — 조감도와 설비를 이름으로 연결
     settings: {
-      sharedPath: '', serverUrl: 'http://127.0.0.1:8765', aiMode: 'rules',
+      /* 서버 주소는 사용자가 설정 화면에서 명시적으로 넣은 뒤에만 접속한다.
+       * 기본값으로 localhost를 호출하면 서버를 설치하지 않은 브라우저마다 오류가 남는다. */
+      sharedPath: '', serverUrl: '', aiMode: 'rules',
       localAiUrl: 'http://127.0.0.1:11434', localAiModel: '',
       externalAiUrl: '', externalAiModel: '', allowExternalFallback: false,
       lawApiUrl: 'https://www.law.go.kr/DRF', lawApiOc: ''
