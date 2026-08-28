@@ -12,7 +12,7 @@
   'use strict';
 
   var KEY = 'hd-facility-v1';
-  var SCHEMA_VERSION = 2;
+  var SCHEMA_VERSION = 3;
 
   var EMPTY = {
     schemaVersion: SCHEMA_VERSION,
@@ -21,8 +21,16 @@
     consumables: [],  // 소모품
     manuals: [],      // 설비별 매뉴얼/파일 메타데이터
     lawReviews: [],   // 설비별 법령 검토 기록
+    lawDocuments: [], // 설비별로 내부 저장한 법령 원문·버전
+    analysisResults: [], // 매뉴얼·법령 분석 결과와 근거
     energy: [],       // 에너지 사용량
     buildings: [],    // {id,name,x,y,w,h} — 조감도와 설비를 이름으로 연결
+    settings: {
+      sharedPath: '', serverUrl: 'http://127.0.0.1:8765', aiMode: 'rules',
+      localAiUrl: 'http://127.0.0.1:11434', localAiModel: '',
+      externalAiUrl: '', externalAiModel: '', allowExternalFallback: false,
+      lawApiUrl: 'https://www.law.go.kr/DRF', lawApiOc: ''
+    },
     savedAt: null
   };
 
@@ -47,6 +55,7 @@
         d[k] = clone(EMPTY[k]);
       }
     });
+    d.settings = Object.assign(clone(EMPTY.settings), d.settings || {});
 
     var known = {};
     d.buildings = d.buildings.map(function (b, i) {
@@ -122,7 +131,7 @@
   function removeEquipment(input, equipmentId) {
     var d = normalize(input);
     d.equipments = d.equipments.filter(function (x) { return x.id !== equipmentId; });
-    ['history', 'consumables', 'manuals', 'lawReviews'].forEach(function (key) {
+    ['history', 'consumables', 'manuals', 'lawReviews', 'lawDocuments', 'analysisResults'].forEach(function (key) {
       d[key] = d[key].filter(function (x) { return x.equipmentId !== equipmentId; });
     });
     return d;

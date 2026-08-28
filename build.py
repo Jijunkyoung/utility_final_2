@@ -4,7 +4,7 @@
 페이지를 굽는다.  실행:  python3 build.py
 
 왜 생성기를 두나
-  메뉴가 일곱 개다. 페이지마다 손으로 적으면 하나를 더할 때 일곱 군데를 고쳐야 하고,
+  메뉴가 여러 개다. 페이지마다 손으로 적으면 하나를 더할 때 모든 파일을 고쳐야 하고,
   꼭 한 곳을 빠뜨린다. 메뉴는 여기 한 곳에만 적는다.
 
 ⚠ 본문은 반드시 `<main>` 안에 넣는다.
@@ -37,6 +37,8 @@ MENU = [
      "월별 고지서 PDF에서 사용량을 뽑아 그래프로 보고 엑셀로 내보냅니다."),
     ("map.html",       "조감도", "캠퍼스 조감도",
      "건물을 누르면 그 건물에 설치된 설비와 사양을 봅니다."),
+    ("settings.html",  "설정",   "저장소·AI 연결 설정",
+     "사내 공유폴더와 로컬 AI·외부 API 연결을 설정하고 권한을 시험합니다."),
 ]
 
 HEAD = """<!doctype html>
@@ -90,7 +92,7 @@ FOOT = """</div></main>
 
 <footer><div class="wrap">
   <p>{site} — 캠퍼스 유틸리티 설비·에너지 통합 관리.
-     자료는 <b>이 브라우저에만</b> 저장됩니다. 다른 PC 로 옮기려면 설비 화면의 내보내기를 쓰세요.</p>
+     사내 서버가 연결되면 파일은 설정한 공유폴더에, 연결 전 임시 자료는 이 브라우저에 저장됩니다.</p>
   <p class="sub">문의 dreamitbiz@naver.com · 010-2634-2426 · 카카오톡 aebon</p>
 </div></footer>
 
@@ -99,6 +101,8 @@ FOOT = """</div></main>
 <script src="js/schedule.js"></script>
 <script src="js/law.js"></script>
 <script src="js/energy.js"></script>
+<script src="js/analysis.js"></script>
+<script src="js/integration.js"></script>
 <script src="js/app.js"></script>
 {extra}
 </body>
@@ -206,6 +210,7 @@ PAGES["equipment.html"] = """
       <div class="register-row"><label for="eq-cycle">검사주기</label><div class="input-with-unit"><input id="eq-cycle" name="cycleMonths" type="number" min="1" step="1" placeholder="12"><span>개월</span></div></div>
       <div class="register-row"><label for="eq-cost">검사비용</label><div class="input-with-unit"><input id="eq-cost" name="inspectCost" type="number" min="0" step="1000" placeholder="0"><span>원</span></div></div>
       <div class="register-row"><label for="eq-law-date">법령 확인일</label><input id="eq-law-date" name="lawCheckedAt" type="date"></div>
+      <div class="register-row"><label for="eq-manual-file">매뉴얼 업로드</label><div class="register-control"><label class="btn file-button" id="eq-manual-file-button" for="eq-manual-file">파일 선택</label><input id="eq-manual-file" type="file" accept=".pdf,.txt,.csv,.xlsx,.xls,.docx"><span class="sub" id="eq-manual-file-name">설비 저장 후 공유폴더에 업로드하고 분석합니다.</span></div></div>
     </form>
     <div id="law-hint"></div>
     <div class="register-actions">
@@ -261,17 +266,32 @@ PAGES["equipment.html"] = """
 	      <label>문서명 <input name="title" required placeholder="운전·정비 매뉴얼"></label>
 	      <label>버전 <input name="version" placeholder="Rev.1"></label>
 	      <label style="grid-column:span 2">사내/로컬 파일 경로 <input name="filePath" placeholder="\\\\fileserver\\facility\\manual.pdf"></label>
-	      <label>파일 메타데이터 <span class="btn file-button" id="manual-file-label">파일 선택</span><input id="manual-file" type="file"></label>
+	      <label>매뉴얼 파일 <span class="btn file-button" id="manual-file-label">파일 선택</span><input id="manual-file" type="file" accept=".pdf,.txt,.csv,.xlsx,.xls,.docx"></label>
 	      <label>메모 <input name="note"></label>
 	    </form>
-	    <p class="sub">파일 내용은 저장하지 않고 파일명·크기·수정일과 입력한 경로만 저장합니다.</p>
-	    <div class="btnrow"><button class="btn primary" id="detail-manual-save" type="button">매뉴얼 추가</button></div>
+	    <p class="sub">사내 서버가 연결되면 원본은 설정한 공유폴더에 저장합니다. 연결 전에는 메타데이터와 분석 결과만 브라우저에 임시 저장합니다.</p>
+	    <div id="manual-status"></div>
+	    <div class="btnrow"><button class="btn primary" id="detail-manual-save" type="button">업로드·분석</button></div>
 	    <ul class="detail-list" id="detail-manuals"></ul>
+	    <div id="detail-manual-analysis"></div>
 	  </section>
 
 	  <section class="detail-panel" data-detail-panel="laws" hidden>
-	    <div class="note"><b>법령 후보는 적용 확정이 아닙니다.</b> 설비 종류와 입력 사양을 바탕으로 확인할 자료를 제시할 뿐이며 검사주기는 자동으로 정하지 않습니다. 폐쇄망에서는 아래에 저장한 사내 법령 자료를 기준으로 검토하세요.</div>
+	    <div class="note"><b>법령 후보는 적용 확정이 아닙니다.</b> 후보를 내부 DB에 저장한 뒤 법령 원문과 설비 사양을 비교 검토합니다. 자동 결과는 담당자가 최종 확인해야 합니다.</div>
 	    <div id="detail-law-candidates"></div>
+	    <h3 class="detail-subtitle">내부 DB에 저장한 법령</h3>
+	    <div id="detail-law-documents"></div>
+	    <form id="detail-law-document-form" class="grid-form compact-form">
+	      <label>선택 법령 <input name="law" readonly placeholder="위 후보에서 저장할 법령을 선택하세요"></label>
+	      <label>시행일/기준일 <input name="effectiveDate" type="date"></label>
+	      <label style="grid-column:1/-1">법령 원문 또는 적용 조항 <textarea name="content" rows="7" placeholder="국가법령정보센터에서 확인한 적용 조항을 붙여넣거나 법령 파일을 선택하세요."></textarea></label>
+	      <label>법령 파일 <span class="btn file-button" id="law-file-label">파일 선택</span><input id="law-file" type="file" accept=".pdf,.txt,.hwp,.docx"></label>
+	    </form>
+	    <div class="btnrow">
+	      <button class="btn primary" id="detail-law-document-save" type="button">법령 원문 저장</button>
+	      <button class="btn green" id="detail-law-review-run" type="button">저장 법령 비교 검토</button>
+	    </div>
+	    <div id="detail-law-comparison"></div>
 	    <h3 class="detail-subtitle">검토 기록 추가</h3>
 	    <form id="detail-law-form" class="grid-form compact-form">
 	      <label>법령명 <input name="law" required></label>
@@ -445,6 +465,51 @@ PAGES["map.html"] = """
 	  <code>buildings</code>의 백분율 좌표를 그림에 맞추면 됩니다. 지금은 같은 좌표 구조에
 	  네모를 배치합니다 — 그림 없이도 어느 건물에 무엇이 있는지는 바로 보입니다.
 	</div>
+"""
+
+# ─────────────────────────────────────────────────────────── 설정
+PAGES["settings.html"] = """
+<div class="settings-layout">
+  <section class="card">
+    <h2>사내 공유폴더</h2>
+    <p class="sub">브라우저만으로는 공유폴더에 직접 쓸 수 없습니다. 사내 Windows 서버 프로그램을 실행한 뒤 아래 경로를 지정하세요.</p>
+    <form id="storage-settings" class="grid-form settings-form">
+      <label>사내 서버 주소 <input name="serverUrl" placeholder="http://서버PC이름:8765"></label>
+      <label>공유폴더 UNC 경로 <input name="sharedPath" placeholder="\\\\fileserver\\facility\\FacilityAI"></label>
+    </form>
+    <div class="btnrow">
+      <button class="btn primary" id="storage-save" type="button">이 경로로 설정</button>
+      <button class="btn" id="server-test" type="button">서버 연결 시험</button>
+      <button class="btn" id="storage-test" type="button">공유폴더 읽기·쓰기 시험</button>
+    </div>
+    <div id="storage-status"></div>
+  </section>
+
+  <section class="card">
+    <h2>AI 분석 방식</h2>
+    <p class="sub">법령·매뉴얼은 규칙 분석을 기본으로 하며, 허용된 환경에서는 로컬 AI 또는 외부 API를 선택할 수 있습니다.</p>
+    <form id="ai-settings" class="grid-form settings-form">
+      <label>분석 모드 <select name="aiMode"><option value="rules">규칙 기반만</option><option value="local">로컬 AI</option><option value="external">외부 API</option><option value="auto">로컬 우선 자동 선택</option></select></label>
+      <label>로컬 AI 주소 <input name="localAiUrl" placeholder="http://127.0.0.1:11434"></label>
+      <label>로컬 AI 모델 <input name="localAiModel" placeholder="예: qwen2.5:7b-instruct-q4_K_M"></label>
+      <label>외부 API 주소 <input name="externalAiUrl" placeholder="OpenAI 호환 /v1/chat/completions 주소"></label>
+      <label>외부 API 모델 <input name="externalAiModel" placeholder="회사에서 승인한 모델명"></label>
+      <label>외부 API 키 <input name="externalApiKey" type="password" autocomplete="new-password" placeholder="서버에만 저장 · 화면에는 다시 표시하지 않음"></label>
+      <label class="check-label"><input name="allowExternalFallback" type="checkbox"> 로컬 AI 실패 시 외부 전송 허용</label>
+    </form>
+    <div class="security-note">외부 전송 허용 전 회사 보안정책을 확인하세요. API 키와 원문은 GitHub나 브라우저 저장소에 기록하지 않습니다.</div>
+  </section>
+
+  <section class="card">
+    <h2>국가법령정보센터 API</h2>
+    <form id="law-api-settings" class="grid-form settings-form">
+      <label>API 기본 주소 <input name="lawApiUrl" placeholder="https://www.law.go.kr/DRF"></label>
+      <label>OC 인증값 <input name="lawApiOc" placeholder="승인받은 OC 값"></label>
+    </form>
+    <div class="btnrow"><button class="btn primary" id="settings-save" type="button">설정 저장</button></div>
+    <div id="settings-status"></div>
+  </section>
+</div>
 """
 
 

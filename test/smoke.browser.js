@@ -1,4 +1,4 @@
-/* 브라우저에 실제로 띄워 일곱 장이 그려지는지 본다.
+/* 브라우저에 실제로 띄워 여덟 장이 그려지는지 본다.
  *
  *   node test/smoke.browser.js
  *
@@ -7,7 +7,7 @@
  * 파일을 읽어서는 안 잡힌다 — 실제로 띄워 봐야 잡힌다.
  *
  * 「예시 자료 넣기」 한 번이 설비·소모품·이력·에너지를 모두 넣으므로,
- * 그것을 누르고 일곱 장을 차례로 도는 것이 가장 넓게 훑는 길이다.
+ * 그것을 누르고 여덟 장을 차례로 도는 것이 가장 넓게 훑는 길이다.
  * 자료가 localStorage 에 있으므로 **같은 컨텍스트를 계속 쓴다.**
  *
  * playwright 가 없으면 조용히 건너뛴다. 이것 하나 때문에 다른 테스트가
@@ -161,11 +161,33 @@ function serve(port) {
     await page.click('#detail-manual-save');
     ok((await page.textContent('#detail-manuals')).indexOf('연기 테스트 매뉴얼') >= 0,
        '매뉴얼 경로/메타데이터를 저장한다');
+    await page.fill('#detail-manual-form [name="title"]', '필터 교체 매뉴얼');
+    await page.setInputFiles('#manual-file', { name: 'manual.txt', mimeType: 'text/plain',
+      buffer: Buffer.from('흡입 필터는 6개월마다 교체한다. 안전밸브는 12개월마다 검사한다.', 'utf8') });
+    await page.click('#detail-manual-save');
+    await page.waitForSelector('#detail-manual-analysis .analysis-card', { timeout: 8000 });
+    ok(await page.locator('#detail-manual-analysis .analysis-card').count() > 0,
+       '업로드한 매뉴얼을 분석해 요약을 표시한다');
+    ok((await page.textContent('#detail-manual-analysis')).indexOf('6개월') >= 0
+       && await page.locator('[data-apply-manual-consumable]').count() > 0,
+       '소모품 교체주기와 일정 등록 버튼을 제안한다');
 
     await page.click('[data-detail-tab="laws"]');
     ok(await page.locator('#detail-law-candidates .law-candidate').count() > 0,
        '설비 사양 기반 법령 후보가 나온다');
     await page.locator('#detail-law-candidates [data-law-candidate]').first().click();
+    ok(await page.locator('#detail-law-documents .law-document').count() > 0,
+       '법령 후보를 눌러 내부 DB 목록에 저장한다');
+    await page.fill('#detail-law-document-form [name="content"]',
+      '사업주는 관리자를 선임하여야 한다. 설비는 정기검사를 실시하여야 한다.');
+    await page.click('#detail-law-document-save');
+    await page.click('#detail-law-review-run');
+    await page.waitForSelector('#detail-law-comparison .comparison-table tbody tr', { timeout: 5000 });
+    ok(await page.locator('#detail-law-comparison .comparison-table tbody tr').count() > 0,
+       '저장한 법령과 설비 사양의 비교 검토표를 만든다');
+    ok((await page.textContent('#detail-law-comparison')).indexOf('정보 부족') >= 0
+       || (await page.textContent('#detail-law-comparison')).indexOf('확인 필요') >= 0,
+       '자동 검토가 부족한 정보나 담당자 확인 필요를 분명히 표시한다');
     await page.fill('#detail-law-form [name="reviewer"]', '연기 테스트');
     await page.fill('#detail-law-form [name="note"]', '사내 법령 자료 확인');
     await page.click('#detail-law-save');
@@ -225,6 +247,16 @@ function serve(port) {
     ok((await page.textContent('#energy-table')).indexOf('2028-07') >= 0
        && (await page.textContent('#read-note')).indexOf('적용했습니다') >= 0,
        '적용 버튼을 눌러 붙여넣은 사용량을 표와 그래프 데이터에 반영한다');
+
+    group('7-1. 설정 — 공유폴더와 두 가지 AI 연결을 고른다');
+    await go('settings.html');
+    ok(await page.isVisible('#storage-settings [name="sharedPath"]')
+       && await page.isVisible('#storage-test'), '공유폴더 경로와 읽기·쓰기 시험 버튼이 있다');
+    ok(await page.locator('#ai-settings [name="aiMode"] option').count() === 4,
+       '규칙·로컬 AI·외부 API·자동 선택 모드를 제공한다');
+    ok(await page.isVisible('#ai-settings [name="externalApiKey"]')
+       && await page.isVisible('#ai-settings [name="localAiUrl"]'),
+       '외부 API와 로컬 AI 설정을 모두 제공한다');
 
     group('8. 조감도 — 건물을 눌러 그 건물 설비 보기');
     await go('map.html');

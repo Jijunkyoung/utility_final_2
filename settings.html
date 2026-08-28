@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>저장소·AI 연결 설정 | Facility AI</title>
+<meta name="description" content="사내 공유폴더와 로컬 AI·외부 API 연결을 설정하고 권한을 시험합니다.">
+<link rel="stylesheet" href="css/style.css">
+<!-- === HD:META:BEGIN (자동 생성 — scripts 로 다시 굽습니다) === -->
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="canonical" href="https://aebonlee.github.io/hd-project15/settings.html">
+<meta name="robots" content="index,follow">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Facility AI">
+<meta property="og:url" content="https://aebonlee.github.io/hd-project15/settings.html">
+<meta property="og:title" content="저장소·AI 연결 설정 — Facility AI">
+<meta property="og:description" content="사내 공유폴더와 로컬 AI·외부 API 연결을 설정하고 권한을 시험합니다.">
+<meta property="og:image" content="https://aebonlee.github.io/hd-project15/og-settings.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale" content="ko_KR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="저장소·AI 연결 설정 — Facility AI">
+<meta name="twitter:description" content="사내 공유폴더와 로컬 AI·외부 API 연결을 설정하고 권한을 시험합니다.">
+<meta name="twitter:image" content="https://aebonlee.github.io/hd-project15/og-settings.png">
+<!-- === HD:META:END === -->
+</head>
+<body>
+
+<nav class="topnav"><div class="topnav-inner">
+  <a class="topnav-brand" href="index.html">Facility AI<small>유틸리티 설비·에너지</small></a>
+  <ul class="topnav-links">
+    <li><a href="index.html">개요</a></li>
+    <li><a href="equipment.html">설비</a></li>
+    <li><a href="alerts.html">알림</a></li>
+    <li><a href="history.html">이력</a></li>
+    <li><a href="cost.html">비용</a></li>
+    <li><a href="energy.html">에너지</a></li>
+    <li><a href="map.html">조감도</a></li>
+    <li><a href="settings.html" class="active">설정</a></li>
+  </ul>
+</div></nav>
+
+<header class="hero"><div class="wrap">
+  <div class="eyebrow">HD 생성형 AI 업무자동화 전문가과정 · 기획 지준경</div>
+  <h1>저장소·AI 연결 설정</h1>
+  <p>사내 공유폴더와 로컬 AI·외부 API 연결을 설정하고 권한을 시험합니다.</p>
+</div></header>
+
+<main><div class="wrap">
+<div class="settings-layout">
+  <section class="card">
+    <h2>사내 공유폴더</h2>
+    <p class="sub">브라우저만으로는 공유폴더에 직접 쓸 수 없습니다. 사내 Windows 서버 프로그램을 실행한 뒤 아래 경로를 지정하세요.</p>
+    <form id="storage-settings" class="grid-form settings-form">
+      <label>사내 서버 주소 <input name="serverUrl" placeholder="http://서버PC이름:8765"></label>
+      <label>공유폴더 UNC 경로 <input name="sharedPath" placeholder="\\fileserver\facility\FacilityAI"></label>
+    </form>
+    <div class="btnrow">
+      <button class="btn primary" id="storage-save" type="button">이 경로로 설정</button>
+      <button class="btn" id="server-test" type="button">서버 연결 시험</button>
+      <button class="btn" id="storage-test" type="button">공유폴더 읽기·쓰기 시험</button>
+    </div>
+    <div id="storage-status"></div>
+  </section>
+
+  <section class="card">
+    <h2>AI 분석 방식</h2>
+    <p class="sub">법령·매뉴얼은 규칙 분석을 기본으로 하며, 허용된 환경에서는 로컬 AI 또는 외부 API를 선택할 수 있습니다.</p>
+    <form id="ai-settings" class="grid-form settings-form">
+      <label>분석 모드 <select name="aiMode"><option value="rules">규칙 기반만</option><option value="local">로컬 AI</option><option value="external">외부 API</option><option value="auto">로컬 우선 자동 선택</option></select></label>
+      <label>로컬 AI 주소 <input name="localAiUrl" placeholder="http://127.0.0.1:11434"></label>
+      <label>로컬 AI 모델 <input name="localAiModel" placeholder="예: qwen2.5:7b-instruct-q4_K_M"></label>
+      <label>외부 API 주소 <input name="externalAiUrl" placeholder="OpenAI 호환 /v1/chat/completions 주소"></label>
+      <label>외부 API 모델 <input name="externalAiModel" placeholder="회사에서 승인한 모델명"></label>
+      <label>외부 API 키 <input name="externalApiKey" type="password" autocomplete="new-password" placeholder="서버에만 저장 · 화면에는 다시 표시하지 않음"></label>
+      <label class="check-label"><input name="allowExternalFallback" type="checkbox"> 로컬 AI 실패 시 외부 전송 허용</label>
+    </form>
+    <div class="security-note">외부 전송 허용 전 회사 보안정책을 확인하세요. API 키와 원문은 GitHub나 브라우저 저장소에 기록하지 않습니다.</div>
+  </section>
+
+  <section class="card">
+    <h2>국가법령정보센터 API</h2>
+    <form id="law-api-settings" class="grid-form settings-form">
+      <label>API 기본 주소 <input name="lawApiUrl" placeholder="https://www.law.go.kr/DRF"></label>
+      <label>OC 인증값 <input name="lawApiOc" placeholder="승인받은 OC 값"></label>
+    </form>
+    <div class="btnrow"><button class="btn primary" id="settings-save" type="button">설정 저장</button></div>
+    <div id="settings-status"></div>
+  </section>
+</div>
+</div></main>
+
+<footer><div class="wrap">
+  <p>Facility AI — 캠퍼스 유틸리티 설비·에너지 통합 관리.
+     사내 서버가 연결되면 파일은 설정한 공유폴더에, 연결 전 임시 자료는 이 브라우저에 저장됩니다.</p>
+  <p class="sub">문의 dreamitbiz@naver.com · 010-2634-2426 · 카카오톡 aebon</p>
+</div></footer>
+
+<script src="lib/xlsx.full.min.js"></script>
+<script src="js/store.js"></script>
+<script src="js/schedule.js"></script>
+<script src="js/law.js"></script>
+<script src="js/energy.js"></script>
+<script src="js/analysis.js"></script>
+<script src="js/integration.js"></script>
+<script src="js/app.js"></script>
+
+</body>
+</html>

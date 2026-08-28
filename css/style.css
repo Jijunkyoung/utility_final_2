@@ -202,13 +202,34 @@ body.register-open{overflow:hidden;}
 .candidate-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr)); gap:10px;}
 .law-candidate{background:#fff; border:1px solid var(--line); border-radius:10px; padding:14px;}
 .law-candidate h4{font-size:15px; margin-bottom:5px;} .law-candidate p{font-size:13px; margin:0 0 8px; color:var(--sub);}
+.law-candidate .btnrow{margin-top:10px;}
+.law-document-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(min(280px,100%),1fr)); gap:10px; margin-bottom:14px;}
+.law-document{background:#fff; border:1px solid var(--line); border-radius:10px; padding:14px;}
+.law-document.selected{border-color:var(--accent); box-shadow:0 0 0 2px rgba(11,110,153,.12);}
+.law-document h4{font-size:15px; margin-bottom:5px;}.law-document p{font-size:13px; color:var(--sub); margin-bottom:8px;}
+.analysis-card{margin-top:16px; padding:16px; border:1px solid #b9cbd7; border-radius:10px; background:#f8fbfd;}
+.analysis-card h4{font-size:15px; margin-bottom:7px;}.analysis-card p{font-size:13.5px;}
+.proposal-list{display:grid; gap:8px; margin-top:10px;}
+.proposal-item{display:grid; grid-template-columns:minmax(120px,1fr) minmax(90px,.45fr) minmax(0,2fr) auto;
+  align-items:center; gap:10px; padding:10px 12px; border:1px solid var(--line); border-radius:8px; background:#fff; font-size:13px;}
+.proposal-item .evidence{white-space:normal; color:var(--sub);}
+.comparison-table td{white-space:normal; vertical-align:top; min-width:120px;}.comparison-table td:nth-child(2){min-width:260px;}
 .small-btn{min-height:30px; padding:0 10px; font-size:12px;}
 body.detail-open{overflow:hidden;}
 @media (max-width:640px){
   .detail-dialog{width:100%; max-height:100vh; height:100vh; border-radius:0;}
   .detail-head{padding:14px 16px 10px;} .detail-tabs{top:67px; padding:8px 16px;}
   .detail-panel{padding:16px;} .detail-list li{flex-direction:column;}
+  .proposal-item{grid-template-columns:1fr;}.proposal-item .btn{width:100%;}
 }
+
+/* ── 사내 저장소·AI 설정 ─────────────────────────────────────────── */
+.settings-layout{display:grid; gap:18px;}.settings-layout .card{margin:0;}
+.settings-layout h2{margin:0 0 6px;}.settings-form{margin-top:14px;}
+.security-note{margin-top:14px; padding:12px 14px; border-radius:8px; background:#fff5dd;
+  color:#654600; border:1px solid #ead39c; font-size:13.5px;}
+.status-line{margin-top:12px; padding:11px 13px; border-radius:8px; font-size:13.5px;}
+.status-line.good{background:#e9f6f0; color:#08422a;}.status-line.bad{background:#fdeae7; color:#7a1a0c;}
 
 /* ── 조감도 ─────────────────────────────────────────────────────────
    그림이 없어도 어느 건물에 무엇이 있는지는 바로 보여야 한다. */
