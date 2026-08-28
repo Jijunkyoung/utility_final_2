@@ -1,57 +1,108 @@
 /**
- * store.js — 자료를 담는 곳
+ * store.js — 자료 저장 계층
  *
- * 이 브라우저에만 저장한다(localStorage). 서버가 없다.
- * 폐쇄망에서 돌아야 하고, 설비 대장은 담당자 한 사람이 관리하는 자료라 이걸로 충분하다.
- *
- * ⚠ 대신 두 가지를 반드시 지킨다.
- *   ① **어디에 저장되는지 화면에 적는다.** 모르고 쓰면 브라우저를 정리했을 때
- *      자료가 사라진 이유를 알 수 없다.
- *   ② **내보내기·가져오기를 둔다.** 다른 PC 로 옮기거나 백업할 길이 없으면
- *      실무에서 못 쓴다.
+ * 화면은 localStorage 를 직접 호출하지 않는다. 지금은 한 PC의 브라우저에 저장하지만,
+ * 이 파일의 load/save 만 사내 API로 바꾸면 화면 코드는 그대로 둘 수 있게 한다.
  */
-(function (root) {
+(function (root, factory) {
+  var api = factory(root);
+  if (typeof module === 'object' && module.exports) module.exports = api;
+  else root.Store = api;
+})(typeof self !== 'undefined' ? self : this, function (root) {
   'use strict';
 
   var KEY = 'hd-facility-v1';
+  var SCHEMA_VERSION = 2;
 
   var EMPTY = {
+    schemaVersion: SCHEMA_VERSION,
     equipments: [],   // 설비
     history: [],      // 이력 (교체·AS·검사)
     consumables: [],  // 소모품
+    manuals: [],      // 설비별 매뉴얼/파일 메타데이터
+    lawReviews: [],   // 설비별 법령 검토 기록
     energy: [],       // 에너지 사용량
-    buildings: [],    // 건물 (조감도)
+    buildings: [],    // {id,name,x,y,w,h} — 조감도와 설비를 이름으로 연결
     savedAt: null
   };
+
+  function clone(v) { return JSON.parse(JSON.stringify(v)); }
+  function text(v) { return v == null ? '' : String(v); }
+
+  function buildingId(name) {
+    var s = text(name).trim().toLowerCase()
+      .replace(/\s+/g, '-')
+      .replace(/[^a-z0-9가-힣_-]/g, '');
+    return 'b-' + (s || 'building');
+  }
+
+  /**
+   * 이전 v1 자료를 v2 모양으로 채운다. 원래 값은 버리지 않는다.
+   * 자동 배치는 4열 기준 백분율 좌표이며, 향후 img/campus.png 좌표로 바꿀 수 있다.
+   */
+  function normalize(input) {
+    var d = input && typeof input === 'object' ? clone(input) : {};
+    Object.keys(EMPTY).forEach(function (k) {
+      if (d[k] === undefined || (Array.isArray(EMPTY[k]) && !Array.isArray(d[k]))) {
+        d[k] = clone(EMPTY[k]);
+      }
+    });
+
+    var known = {};
+    d.buildings = d.buildings.map(function (b, i) {
+      if (typeof b === 'string') b = { name: b };
+      b = b || {};
+      var name = text(b.name).trim();
+      var col = i % 4, row = Math.floor(i / 4);
+      var out = {
+        id: b.id || buildingId(name),
+        name: name,
+        x: Number.isFinite(Number(b.x)) ? Number(b.x) : 4 + col * 24,
+        y: Number.isFinite(Number(b.y)) ? Number(b.y) : 8 + row * 30,
+        w: Number.isFinite(Number(b.w)) ? Number(b.w) : 20,
+        h: Number.isFinite(Number(b.h)) ? Number(b.h) : 22
+      };
+      if (name) known[name] = true;
+      return out;
+    }).filter(function (b) { return b.name; });
+
+    (d.equipments || []).forEach(function (e) {
+      var name = text(e.building).trim();
+      if (!name || known[name]) return;
+      var i = d.buildings.length, col = i % 4, row = Math.floor(i / 4);
+      d.buildings.push({
+        id: buildingId(name), name: name,
+        x: 4 + col * 24, y: 8 + row * 30, w: 20, h: 22
+      });
+      known[name] = true;
+    });
+
+    d.schemaVersion = SCHEMA_VERSION;
+    return d;
+  }
 
   function load() {
     try {
       var raw = root.localStorage.getItem(KEY);
-      if (!raw) return clone(EMPTY);
-      var d = JSON.parse(raw);
-      // 나중에 항목이 늘어도 예전 자료가 깨지지 않게 빈 값을 채운다
-      Object.keys(EMPTY).forEach(function (k) {
-        if (d[k] === undefined) d[k] = clone(EMPTY[k]);
-      });
-      return d;
+      return normalize(raw ? JSON.parse(raw) : EMPTY);
     } catch (e) {
-      return clone(EMPTY);
+      return normalize(EMPTY);
     }
   }
 
-  function save(d) {
-    d.savedAt = new Date().toISOString();
+  function save(input) {
+    var d = normalize(input);
+    // 호출자가 들고 있는 객체도 정규화된 컬렉션을 보게 한다.
+    Object.keys(d).forEach(function (k) { input[k] = d[k]; });
+    input.savedAt = new Date().toISOString();
     try {
-      root.localStorage.setItem(KEY, JSON.stringify(d));
+      root.localStorage.setItem(KEY, JSON.stringify(input));
       return { ok: true };
     } catch (e) {
-      // 용량이 차면 저장이 실패하는데 화면은 그대로다 — 반드시 알린다.
       return { ok: false, error: '저장하지 못했습니다: ' + (e && e.message || e)
              + '\n브라우저 저장 공간이 찼을 수 있습니다. 내보내기로 백업한 뒤 정리하세요.' };
     }
   }
-
-  function clone(v) { return JSON.parse(JSON.stringify(v)); }
 
   /** 새 id — 시각 + 무작위. 같은 밀리초에 두 건을 넣어도 겹치지 않는다. */
   function newId(prefix) {
@@ -63,5 +114,24 @@
     try { root.localStorage.removeItem(KEY); } catch (e) {}
   }
 
-  root.Store = { KEY: KEY, load: load, save: save, newId: newId, reset: reset, EMPTY: EMPTY };
-})(typeof self !== 'undefined' ? self : this);
+  function forEquipment(list, equipmentId) {
+    return (list || []).filter(function (x) { return x.equipmentId === equipmentId; });
+  }
+
+  /** 설비와 설비 ID에 매달린 상세 자료를 한 번에 지운다. */
+  function removeEquipment(input, equipmentId) {
+    var d = normalize(input);
+    d.equipments = d.equipments.filter(function (x) { return x.id !== equipmentId; });
+    ['history', 'consumables', 'manuals', 'lawReviews'].forEach(function (key) {
+      d[key] = d[key].filter(function (x) { return x.equipmentId !== equipmentId; });
+    });
+    return d;
+  }
+
+  return {
+    KEY: KEY, SCHEMA_VERSION: SCHEMA_VERSION, EMPTY: EMPTY,
+    load: load, save: save, normalize: normalize, newId: newId,
+    reset: reset, forEquipment: forEquipment, removeEquipment: removeEquipment,
+    buildingId: buildingId
+  };
+});

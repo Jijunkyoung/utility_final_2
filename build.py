@@ -163,49 +163,129 @@ PAGES["index.html"] = """
 
 # ─────────────────────────────────────────────────────────── 설비
 PAGES["equipment.html"] = """
-<div class="card">
-  <h3 style="font-size:16px;margin-bottom:10px">설비 등록</h3>
-  <form id="eq-form" class="grid-form">
-    <label>설비번호 <input name="code" required placeholder="U-EL-01"></label>
-    <label>설비명 <input name="name" required placeholder="본관 승객용 승강기 1호기"></label>
-    <label>종류
-      <select name="kind" id="kind"></select>
-    </label>
-    <label>건물 <input name="building" placeholder="본관" list="bldg-list"><datalist id="bldg-list"></datalist></label>
-    <label>설치위치 <input name="place" placeholder="지하 1층 기계실"></label>
-    <label>사양 <input name="spec" placeholder="15인승 / 1.0 m/s / 11.5 kW"></label>
-    <label>유량 <input name="flow" placeholder="—"></label>
-    <label>압력 <input name="pressure" placeholder="—"></label>
-    <label>소모전력 <input name="power" placeholder="11.5 kW"></label>
-    <label>냉난방용량 <input name="hvac" placeholder="—"></label>
-    <label>법정선임관리자 <input name="legalMgr" placeholder="이름 / 연락처"></label>
-    <label>유지관리자 <input name="mgr" placeholder="이름 / 연락처"></label>
-    <label>유지관리자 메일 <input name="mgrEmail" type="email" placeholder="name@company.com"></label>
-    <label>마지막 법정검사 <input name="lastInspect" type="date"></label>
-    <label>검사 주기(개월) <input name="cycleMonths" type="number" min="1" step="1" placeholder="12"></label>
-    <label>검사 비용(원) <input name="inspectCost" type="number" min="0" step="1000" placeholder="—"></label>
-    <label>법령 확인일 <input name="lawCheckedAt" type="date"></label>
-    <label style="grid-column:1/-1">매뉴얼 위치 <input name="manual" placeholder="사내 공유폴더 경로 또는 문서번호"></label>
-  </form>
-  <div id="law-hint"></div>
-  <div class="btnrow">
-    <button class="btn primary" id="eq-save">등록</button>
-    <button class="btn" id="eq-clear" type="button">입력 지우기</button>
-  </div>
+<div class="section-toolbar">
+  <div><h2>설비 목록 <span class="sub" id="eq-count"></span></h2>
+    <p class="sub">설비를 선택하면 사양·소모품·이력·매뉴얼·법령을 한 번에 관리할 수 있습니다.</p></div>
+  <button class="btn primary" id="eq-create-open" type="button">+ 설비 등록</button>
 </div>
-
-<h2>설비 목록 <span class="sub" id="eq-count"></span></h2>
-<div class="btnrow" style="margin-top:0;margin-bottom:12px">
+<div class="btnrow equipment-tools">
   <button class="btn" id="export">내보내기 (JSON)</button>
   <label class="btn" for="import-file">가져오기</label>
   <input type="file" id="import-file" accept=".json">
   <button class="btn" id="export-xlsx">엑셀로 내보내기</button>
 </div>
-<div class="tablewrap"><table id="eq-table">
-  <thead><tr><th></th><th>설비번호</th><th>설비명</th><th>종류</th><th>건물</th><th>위치</th>
-    <th>사양</th><th>유지관리자</th><th>마지막 검사</th><th>주기</th><th>법령 확인일</th></tr></thead>
-  <tbody></tbody></table></div>
-"""
+	<div class="tablewrap"><table id="eq-table">
+	  <thead><tr><th>관리</th><th>설비번호</th><th>설비명</th><th>종류</th><th>건물</th><th>위치</th>
+	    <th>사양</th><th>유지관리자</th><th>마지막 검사</th><th>주기</th><th>법령 확인일</th></tr></thead>
+	  <tbody></tbody></table></div>
+
+  <dialog id="eq-create" class="register-dialog" aria-labelledby="eq-create-title">
+    <div class="register-head">
+      <div><p class="sub">신규 설비</p><h2 id="eq-create-title">설비 등록</h2></div>
+      <button class="btn" id="eq-create-close" type="button" aria-label="설비 등록 닫기">닫기</button>
+    </div>
+    <form id="eq-form" class="register-form">
+      <div class="register-row"><label for="eq-code">설비번호</label><input id="eq-code" name="code" required placeholder="U-EL-01"></div>
+      <div class="register-row"><label for="eq-name">설비명</label><input id="eq-name" name="name" required placeholder="본관 승객용 승강기 1호기"></div>
+      <div class="register-row"><label for="kind">종류</label><div class="register-control"><select name="kind" id="kind" required></select><input id="kind-other" placeholder="기타 설비 종류를 입력하세요" hidden></div></div>
+      <div class="register-row"><label for="eq-model">모델명</label><input id="eq-model" name="model" placeholder="모델명"></div>
+      <div class="register-row"><label for="eq-manufacturer">제조사</label><input id="eq-manufacturer" name="manufacturer" placeholder="제조사"></div>
+      <div class="register-row"><label for="eq-capacity">용량</label><input id="eq-capacity" name="capacity" placeholder="1.5 t/h / 300 RT"></div>
+      <div class="register-row"><label for="eq-flow">유량</label><input id="eq-flow" name="flow" placeholder="120 ㎥/h"></div>
+      <div class="register-row"><label for="eq-pressure">압력</label><input id="eq-pressure" name="pressure" placeholder="0.98 MPa"></div>
+      <div class="register-row"><label for="eq-power">소모전력</label><input id="eq-power" name="power" placeholder="11.5 kW"></div>
+      <div class="register-row"><label for="eq-hvac">냉난방능력</label><input id="eq-hvac" name="hvac" placeholder="냉방 300 RT"></div>
+      <div class="register-row"><label for="eq-spec">기타사양</label><input id="eq-spec" name="spec" placeholder="운전 조건, 규격 등"></div>
+      <div class="register-row"><label for="eq-building">위치</label><input id="eq-building" name="building" placeholder="본관" list="bldg-list"><datalist id="bldg-list"></datalist></div>
+      <div class="register-row"><label for="eq-place">세부위치</label><input id="eq-place" name="place" placeholder="지하 1층 기계실"></div>
+      <div class="register-row"><label for="eq-installed">설치일</label><input id="eq-installed" name="installedAt" type="date"></div>
+      <div class="register-row"><label for="eq-legal-mgr">법정선임관리자</label><input id="eq-legal-mgr" name="legalMgr" placeholder="이름 / 연락처"></div>
+      <div class="register-row"><label for="eq-mgr">유지관리자</label><input id="eq-mgr" name="mgr" placeholder="이름 / 연락처"></div>
+      <div class="register-row"><label for="eq-mgr-email">유지관리자 메일</label><input id="eq-mgr-email" name="mgrEmail" type="email" placeholder="name@company.com"></div>
+      <div class="register-row"><label for="eq-last-inspect">법정검사</label><input id="eq-last-inspect" name="lastInspect" type="date"></div>
+      <div class="register-row"><label for="eq-cycle">검사주기</label><div class="input-with-unit"><input id="eq-cycle" name="cycleMonths" type="number" min="1" step="1" placeholder="12"><span>개월</span></div></div>
+      <div class="register-row"><label for="eq-cost">검사비용</label><div class="input-with-unit"><input id="eq-cost" name="inspectCost" type="number" min="0" step="1000" placeholder="0"><span>원</span></div></div>
+      <div class="register-row"><label for="eq-law-date">법령 확인일</label><input id="eq-law-date" name="lawCheckedAt" type="date"></div>
+    </form>
+    <div id="law-hint"></div>
+    <div class="register-actions">
+      <button class="btn" id="eq-clear" type="button">입력 지우기</button>
+      <button class="btn primary" id="eq-save" type="button">설비 등록</button>
+    </div>
+  </dialog>
+
+	<dialog id="eq-detail" class="detail-dialog" aria-labelledby="detail-title">
+	  <div class="detail-head">
+	    <div><p class="sub" id="detail-code"></p><h2 id="detail-title">설비 상세</h2></div>
+	    <button class="btn" id="detail-close" type="button" aria-label="상세 닫기">닫기</button>
+	  </div>
+	  <div class="detail-tabs" role="tablist" aria-label="설비 상세 메뉴">
+	    <button type="button" class="detail-tab on" data-detail-tab="basic" role="tab">기본정보</button>
+	    <button type="button" class="detail-tab" data-detail-tab="consumables" role="tab">소모품</button>
+	    <button type="button" class="detail-tab" data-detail-tab="history" role="tab">이력</button>
+	    <button type="button" class="detail-tab" data-detail-tab="manuals" role="tab">매뉴얼</button>
+	    <button type="button" class="detail-tab" data-detail-tab="laws" role="tab">법령</button>
+	  </div>
+
+	  <section class="detail-panel on" data-detail-panel="basic">
+	    <form id="detail-basic-form" class="grid-form"></form>
+	    <div class="btnrow"><button class="btn primary" id="detail-basic-save" type="button">기본정보 저장</button></div>
+	  </section>
+
+	  <section class="detail-panel" data-detail-panel="consumables" hidden>
+	    <form id="detail-consumable-form" class="grid-form compact-form">
+	      <label>소모품명 <input name="name" required placeholder="필터"></label>
+	      <label>교체주기(개월) <input name="cycleMonths" type="number" min="1" step="1" required></label>
+	      <label>최근교체일 <input name="lastDate" type="date"></label>
+	      <label>단가(원) <input name="cost" type="number" min="0" step="1000" placeholder="모르면 비워 둠"></label>
+	      <label>메모 <input name="note"></label>
+	    </form>
+	    <div class="btnrow"><button class="btn primary" id="detail-consumable-save" type="button">소모품 추가</button></div>
+	    <div class="tablewrap detail-table"><table id="detail-consumables"><thead><tr><th></th><th>소모품</th><th>주기</th><th>최근교체</th><th>예정일</th><th>상태</th><th>단가</th></tr></thead><tbody></tbody></table></div>
+	  </section>
+
+	  <section class="detail-panel" data-detail-panel="history" hidden>
+	    <form id="detail-history-form" class="grid-form compact-form">
+	      <label>구분 <select name="kind"><option>유지보수</option><option>고장 AS</option><option>법정검사</option><option>소모품 교체</option><option>기타</option></select></label>
+	      <label>일자 <input name="date" type="date" required></label>
+	      <label>업체 <input name="vendor"></label>
+	      <label>금액(원) <input name="cost" type="number" min="0" step="1000" placeholder="모르면 비워 둠"></label>
+	      <label style="grid-column:1/-1">내용 <input name="memo" required></label>
+	    </form>
+	    <div class="btnrow"><button class="btn primary" id="detail-history-save" type="button">이력 추가</button></div>
+	    <div class="tablewrap detail-table"><table id="detail-history"><thead><tr><th></th><th>일자</th><th>구분</th><th>내용</th><th>업체</th><th>금액</th></tr></thead><tbody></tbody></table></div>
+	  </section>
+
+	  <section class="detail-panel" data-detail-panel="manuals" hidden>
+	    <form id="detail-manual-form" class="grid-form compact-form">
+	      <label>문서명 <input name="title" required placeholder="운전·정비 매뉴얼"></label>
+	      <label>버전 <input name="version" placeholder="Rev.1"></label>
+	      <label style="grid-column:span 2">사내/로컬 파일 경로 <input name="filePath" placeholder="\\\\fileserver\\facility\\manual.pdf"></label>
+	      <label>파일 메타데이터 <span class="btn file-button" id="manual-file-label">파일 선택</span><input id="manual-file" type="file"></label>
+	      <label>메모 <input name="note"></label>
+	    </form>
+	    <p class="sub">파일 내용은 저장하지 않고 파일명·크기·수정일과 입력한 경로만 저장합니다.</p>
+	    <div class="btnrow"><button class="btn primary" id="detail-manual-save" type="button">매뉴얼 추가</button></div>
+	    <ul class="detail-list" id="detail-manuals"></ul>
+	  </section>
+
+	  <section class="detail-panel" data-detail-panel="laws" hidden>
+	    <div class="note"><b>법령 후보는 적용 확정이 아닙니다.</b> 설비 종류와 입력 사양을 바탕으로 확인할 자료를 제시할 뿐이며 검사주기는 자동으로 정하지 않습니다. 폐쇄망에서는 아래에 저장한 사내 법령 자료를 기준으로 검토하세요.</div>
+	    <div id="detail-law-candidates"></div>
+	    <h3 class="detail-subtitle">검토 기록 추가</h3>
+	    <form id="detail-law-form" class="grid-form compact-form">
+	      <label>법령명 <input name="law" required></label>
+	      <label>확인일 <input name="checkedAt" type="date" required></label>
+	      <label>확인자 <input name="reviewer"></label>
+	      <label>첨부/파일경로 <input name="filePath" placeholder="사내 법령자료 경로"></label>
+	      <label style="grid-column:1/-1">메모 <input name="note" placeholder="적용 조문, 판단 근거, 다음 확인사항"></label>
+	      <label class="check-label"><input name="needsReview" type="checkbox"> 재검토 필요</label>
+	    </form>
+	    <div class="btnrow"><button class="btn primary" id="detail-law-save" type="button">검토 기록 저장</button></div>
+	    <div class="tablewrap detail-table"><table id="detail-laws"><thead><tr><th></th><th>법령명</th><th>확인일</th><th>확인자</th><th>재검토</th><th>파일경로</th><th>메모</th></tr></thead><tbody></tbody></table></div>
+	  </section>
+	</dialog>
+	"""
 
 # ─────────────────────────────────────────────────────────── 알림
 PAGES["alerts.html"] = """
@@ -322,17 +402,23 @@ PAGES["energy.html"] = """
   <ul class="filelist" id="files"></ul>
   <div id="read-note"></div>
   <div class="btnrow">
-    <button class="btn" id="paste-toggle">글로 붙여넣기</button>
+    <button class="btn" id="paste-toggle" type="button" aria-controls="paste-panel" aria-expanded="false">글로 붙여넣기</button>
     <button class="btn" id="energy-xlsx" disabled>엑셀로 내보내기</button>
     <button class="btn" id="energy-clear">비우기</button>
   </div>
-  <textarea id="paste" rows="7" hidden placeholder="2026년 1월 전력 사용량 125,400 kWh 요금 18,310,000 원"
-    style="width:100%;margin-top:12px;font-family:ui-monospace,monospace;font-size:13px;
-           padding:12px;border:1px solid var(--line);border-radius:8px"></textarea>
+  <div id="paste-panel" class="paste-panel" hidden>
+    <label for="paste"><b>고지서 내용을 붙여넣으세요</b></label>
+    <p class="sub">연월·종류·사용량이 포함된 글을 넣은 뒤 적용 버튼을 누릅니다.</p>
+    <textarea id="paste" rows="7" placeholder="2026년 7월 전력 사용량 125,400 kWh 요금 18,310,000 원"></textarea>
+    <div class="paste-actions">
+      <span class="sub">Ctrl + Enter로도 적용할 수 있습니다.</span>
+      <button class="btn primary" id="paste-apply" type="button" disabled>적용</button>
+    </div>
+  </div>
 </div>
 
 <h2>월별 사용량</h2>
-<div id="charts"></div>
+<div id="charts" class="energy-chart-grid"></div>
 
 <div class="tablewrap"><table id="energy-table">
   <thead><tr><th>연월</th><th>종류</th><th>사용량</th><th>단위</th><th>전월 대비</th><th>요금</th><th>읽은 줄</th></tr></thead>
@@ -342,9 +428,9 @@ PAGES["energy.html"] = """
 # ─────────────────────────────────────────────────────────── 조감도
 PAGES["map.html"] = """
 <div class="card">
-  <h3 style="font-size:16px;margin-bottom:6px">건물 배치</h3>
-  <p class="sub">건물을 누르면 그 건물의 설비가 아래에 나옵니다.
-     건물은 설비에 적은 <b>건물</b> 값에서 자동으로 만들어집니다.</p>
+	  <h3 style="font-size:16px;margin-bottom:6px">건물 배치</h3>
+	  <p class="sub">건물을 누르면 그 건물의 설비가 아래에 나옵니다.
+	     건물은 설비에 적은 <b>건물</b> 값과 분리된 건물 ID·좌표로 배치됩니다.</p>
   <div id="campus"></div>
 </div>
 
@@ -354,11 +440,11 @@ PAGES["map.html"] = """
     <th>소모전력</th><th>유지관리자</th><th>다음 검사</th></tr></thead>
   <tbody></tbody></table></div>
 
-<div class="note">
-  <b>실제 조감도 그림을 쓰려면</b> 이미지를 <code>img/campus.png</code> 로 넣고
-  설비의 건물 이름과 그림 위 좌표를 맞추면 됩니다. 지금은 건물 이름만으로
-  네모를 자동 배치합니다 — 그림 없이도 어느 건물에 무엇이 있는지는 바로 보입니다.
-</div>
+	<div class="note">
+	  <b>실제 조감도 그림을 쓰려면</b> 이미지를 <code>img/campus.png</code> 로 넣고
+	  <code>buildings</code>의 백분율 좌표를 그림에 맞추면 됩니다. 지금은 같은 좌표 구조에
+	  네모를 배치합니다 — 그림 없이도 어느 건물에 무엇이 있는지는 바로 보입니다.
+	</div>
 """
 
 

@@ -13,17 +13,17 @@
 <link rel="canonical" href="https://aebonlee.github.io/hd-project15/energy.html">
 <meta name="robots" content="index,follow">
 <meta property="og:type" content="website">
-<meta property="og:site_name" content="HD 생성형 AI 업무자동화 전문가과정">
+<meta property="og:site_name" content="Facility AI">
 <meta property="og:url" content="https://aebonlee.github.io/hd-project15/energy.html">
-<meta property="og:title" content="에너지 사용량 분석 — HD 생성형 AI 업무자동화 전문가과정">
-<meta property="og:description" content="월별 고지서 PDF에서 사용량을 뽑아 그래프로 보고 엑셀로 내보냅니다. 못 읽은 달은 0 으로 채우지 않습니다.">
+<meta property="og:title" content="에너지 사용량 분석 — Facility AI">
+<meta property="og:description" content="월별 고지서 PDF에서 사용량을 뽑아 그래프로 보고 엑셀로 내보냅니다.">
 <meta property="og:image" content="https://aebonlee.github.io/hd-project15/og-energy.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="에너지 사용량 분석 — HD 생성형 AI 업무자동화 전문가과정">
-<meta name="twitter:description" content="월별 고지서 PDF에서 사용량을 뽑아 그래프로 보고 엑셀로 내보냅니다. 못 읽은 달은 0 으로 채우지 않습니다.">
+<meta name="twitter:title" content="에너지 사용량 분석 — Facility AI">
+<meta name="twitter:description" content="월별 고지서 PDF에서 사용량을 뽑아 그래프로 보고 엑셀로 내보냅니다.">
 <meta name="twitter:image" content="https://aebonlee.github.io/hd-project15/og-energy.png">
 <!-- === HD:META:END === -->
 </head>
@@ -58,17 +58,23 @@
   <ul class="filelist" id="files"></ul>
   <div id="read-note"></div>
   <div class="btnrow">
-    <button class="btn" id="paste-toggle">글로 붙여넣기</button>
+    <button class="btn" id="paste-toggle" type="button" aria-controls="paste-panel" aria-expanded="false">글로 붙여넣기</button>
     <button class="btn" id="energy-xlsx" disabled>엑셀로 내보내기</button>
     <button class="btn" id="energy-clear">비우기</button>
   </div>
-  <textarea id="paste" rows="7" hidden placeholder="2026년 1월 전력 사용량 125,400 kWh 요금 18,310,000 원"
-    style="width:100%;margin-top:12px;font-family:ui-monospace,monospace;font-size:13px;
-           padding:12px;border:1px solid var(--line);border-radius:8px"></textarea>
+  <div id="paste-panel" class="paste-panel" hidden>
+    <label for="paste"><b>고지서 내용을 붙여넣으세요</b></label>
+    <p class="sub">연월·종류·사용량이 포함된 글을 넣은 뒤 적용 버튼을 누릅니다.</p>
+    <textarea id="paste" rows="7" placeholder="2026년 7월 전력 사용량 125,400 kWh 요금 18,310,000 원"></textarea>
+    <div class="paste-actions">
+      <span class="sub">Ctrl + Enter로도 적용할 수 있습니다.</span>
+      <button class="btn primary" id="paste-apply" type="button" disabled>적용</button>
+    </div>
+  </div>
 </div>
 
 <h2>월별 사용량</h2>
-<div id="charts"></div>
+<div id="charts" class="energy-chart-grid"></div>
 
 <div class="tablewrap"><table id="energy-table">
   <thead><tr><th>연월</th><th>종류</th><th>사용량</th><th>단위</th><th>전월 대비</th><th>요금</th><th>읽은 줄</th></tr></thead>

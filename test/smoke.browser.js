@@ -2,7 +2,7 @@
  *
  *   node test/smoke.browser.js
  *
- * 규칙 테스트(test/logic.test.js)가 61개 전부 통과해도 app.js 의 오타 하나면
+ * 규칙 테스트(test/logic.test.js)가 전부 통과해도 app.js 의 오타 하나면
  * 페이지가 빈 화면이 된다. 규칙은 맞는데 아무도 그것을 볼 수 없는 상태다.
  * 파일을 읽어서는 안 잡힌다 — 실제로 띄워 봐야 잡힌다.
  *
@@ -106,10 +106,12 @@ function serve(port) {
     var counts = await page.evaluate(function () {
       var db = Store.load();
       return [ (db.equipments || []).length, (db.consumables || []).length,
-               (db.history || []).length, (db.energy || []).length ];
+               (db.history || []).length, (db.energy || []).length,
+               (db.manuals || []).length, (db.lawReviews || []).length,
+               (db.buildings || []).length ];
     });
-    ok(counts[0] > 0 && counts[1] > 0 && counts[2] > 0 && counts[3] > 0,
-       '설비·소모품·이력·에너지가 모두 들어갔다 (' + counts.join(' / ') + ')');
+    ok(counts.every(function (n) { return n > 0; }),
+       '설비·소모품·이력·에너지·매뉴얼·법령검토·건물좌표가 모두 들어갔다 (' + counts.join(' / ') + ')');
     ok(!(await page.isVisible('#empty-hint')), '「자료 없음」 안내가 사라진다');
 
     group('3. 설비 — 법령은 알려 주되 주기는 알려 주지 않는다');
@@ -117,6 +119,17 @@ function serve(port) {
     ok((await page.textContent('#eq-count')).indexOf('0건') < 0,
        '설비 목록에 건수가 나온다 (' + (await page.textContent('#eq-count')).trim() + ')');
     ok(await page.locator('#eq-table tbody tr').count() > 0, '설비 표에 줄이 있다');
+    ok(await page.isVisible('#eq-create-open'), '설비 등록은 목록 위 버튼으로 보인다');
+    await page.click('#eq-create-open');
+    ok(await page.isVisible('#eq-create'), '설비 등록 버튼을 누르면 입력 창이 열린다');
+    var registrationLabels = await page.locator('#eq-form .register-row>label').allTextContents();
+    ok(registrationLabels.join('|') === [
+      '설비번호','설비명','종류','모델명','제조사','용량','유량','압력','소모전력','냉난방능력',
+      '기타사양','위치','세부위치','설치일','법정선임관리자','유지관리자','유지관리자 메일',
+      '법정검사','검사주기','검사비용','법령 확인일'
+    ].join('|'), '설비 등록 항목이 요청 순서대로 한 줄씩 나온다');
+    await page.selectOption('#kind', '기타');
+    ok(await page.isVisible('#kind-other'), '종류가 기타이면 직접 입력 칸이 열린다');
 
     /* 이 저장소의 중심 규칙이다. 종류를 고르면 법령은 나오되
      * **주기 숫자를 주지 않는다.** 주면 아무도 다시 확인하지 않는다. */
@@ -129,6 +142,43 @@ function serve(port) {
        '주기를 알려 주지 않는다고 분명히 적는다', hint.slice(0, 160));
     ok(!/\d+\s*개월마다|\d+\s*년마다|주기\s*[:：]\s*\d/.test(hint),
        '법령 안내에 주기 숫자를 지어내지 않는다', hint.slice(0, 160));
+    await page.click('#eq-create-close');
+
+    group('3-1. 설비 상세 — 다섯 탭이 같은 설비 ID 자료를 저장한다');
+    await page.locator('#eq-table [data-detail]').first().click();
+    ok(await page.isVisible('#eq-detail'), '상세 패널이 열린다');
+    ok(await page.locator('#eq-detail [data-detail-tab]').count() === 5,
+       '기본정보·소모품·이력·매뉴얼·법령 탭이 있다');
+
+    await page.click('[data-detail-tab="consumables"]');
+    ok(await page.locator('#detail-consumables tbody tr').count() > 0, '설비별 소모품이 나온다');
+    await page.click('[data-detail-tab="history"]');
+    ok(await page.locator('#detail-history tbody tr').count() > 0, '설비별 이력이 나온다');
+    await page.click('[data-detail-tab="manuals"]');
+    ok(await page.locator('#detail-manuals li').count() > 0, '설비별 매뉴얼이 나온다');
+    await page.fill('#detail-manual-form [name="title"]', '연기 테스트 매뉴얼');
+    await page.fill('#detail-manual-form [name="filePath"]', '\\\\fileserver\\test\\manual.pdf');
+    await page.click('#detail-manual-save');
+    ok((await page.textContent('#detail-manuals')).indexOf('연기 테스트 매뉴얼') >= 0,
+       '매뉴얼 경로/메타데이터를 저장한다');
+
+    await page.click('[data-detail-tab="laws"]');
+    ok(await page.locator('#detail-law-candidates .law-candidate').count() > 0,
+       '설비 사양 기반 법령 후보가 나온다');
+    await page.locator('#detail-law-candidates [data-law-candidate]').first().click();
+    await page.fill('#detail-law-form [name="reviewer"]', '연기 테스트');
+    await page.fill('#detail-law-form [name="note"]', '사내 법령 자료 확인');
+    await page.click('#detail-law-save');
+    ok((await page.textContent('#detail-laws')).indexOf('연기 테스트') >= 0,
+       '법령 검토 기록을 설비별로 저장한다');
+    await page.click('#detail-close');
+
+    await page.reload({ waitUntil: 'networkidle' });
+    await page.locator('#eq-table [data-detail]').first().click();
+    await page.click('[data-detail-tab="manuals"]');
+    ok((await page.textContent('#detail-manuals')).indexOf('연기 테스트 매뉴얼') >= 0,
+       '새로고침 뒤에도 상세 자료가 유지된다');
+    await page.click('#detail-close');
 
     group('4. 알림 — 시기를 계산하고 문안을 만들어 준다');
     await go('alerts.html');
@@ -161,13 +211,27 @@ function serve(port) {
     await go('energy.html');
     ok(await page.locator('#energy-table tbody tr').count() > 0, '에너지 표에 줄이 있다');
     var svg = await page.locator('#charts svg').count();
-    ok(svg > 0, '그래프를 SVG 로 직접 그린다 (' + svg + '개)');
+    ok(svg === 4, '전력·수도·가스·압축공기 그래프 네 개를 SVG 로 그린다 (' + svg + '개)');
+    var chartTitles = await page.locator('#charts .energy-chart h3').allTextContents();
+    ok(chartTitles.map(function (t) { return t.replace(/\s*\(.*/, ''); }).join('|') === '전력|수도|가스|압축공기',
+       '기타 없이 네 종류 그래프만 정해진 순서로 보인다');
     ok(await page.isVisible('#drop'), '고지서를 끌어다 놓는 자리가 보인다');
+    await page.click('#paste-toggle');
+    ok(await page.isVisible('#paste') && await page.isVisible('#paste-apply'),
+       '글 입력창을 열면 적용 버튼이 함께 보인다');
+    await page.fill('#paste', '2028년 7월 수도 사용량 1,234 m3');
+    ok(await page.isEnabled('#paste-apply'), '글을 입력해야 적용 버튼이 활성화된다');
+    await page.click('#paste-apply');
+    ok((await page.textContent('#energy-table')).indexOf('2028-07') >= 0
+       && (await page.textContent('#read-note')).indexOf('적용했습니다') >= 0,
+       '적용 버튼을 눌러 붙여넣은 사용량을 표와 그래프 데이터에 반영한다');
 
     group('8. 조감도 — 건물을 눌러 그 건물 설비 보기');
     await go('map.html');
     var bldgs = await page.locator('#campus .bldg, #campus [data-bldg], #campus g, #campus rect').count();
     ok(bldgs > 0, '건물이 그려진다 (' + bldgs + '개)');
+    ok(await page.locator('#campus [data-building-id]').count() === bldgs,
+       '건물 ID와 좌표 구조로 배치된다');
 
     group('9. 좁은 화면에서 가로로 넘치지 않는다');
     await go('');

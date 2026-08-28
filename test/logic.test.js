@@ -16,6 +16,7 @@
 const S = require('../js/schedule.js');
 const L = require('../js/law.js');
 const E = require('../js/energy.js');
+const St = require('../js/store.js');
 
 let pass = 0;
 const fails = [];
@@ -158,7 +159,59 @@ const old = L.needsReview([
 eq(old.length, 1, '확인한 지 1년이 넘으면 다시 확인 대상');
 ok(/지났/.test(old[0].reasons.join()), '  며칠 지났는지 적는다');
 
-/* ── ⑤ 에너지 사용량 읽기 ────────────────────────────────────────── */
+/* 설비 상세의 법령 후보는 입력 사양을 보여 주되 적용 여부를 단정하지 않는다 */
+const equipmentLaws = L.lawsForEquipment({
+  id: 'eq1', name: '온수보일러', kind: '보일러', capacity: '1.5 t/h', pressure: '0.98 MPa'
+});
+ok(equipmentLaws.length > 0, '설비 종류로 상세 법령 후보를 만든다');
+ok(equipmentLaws[0].basis.indexOf('1.5 t/h') >= 0 && equipmentLaws[0].basis.indexOf('0.98 MPa') >= 0,
+   '  용량·압력을 검토 입력값으로 함께 보여 준다');
+ok(equipmentLaws.every(x => x.cycleMonths === null), '  상세 후보도 검사 주기를 지어내지 않는다');
+
+const reviewed = L.needsReview([
+  { id: 'eq1', name: 'A', kind: '보일러', lawCheckedAt: null, cycleMonths: 12, capacity: '1.5 t/h' }
+], '2026-08-26', 365, [
+  { equipmentId: 'eq1', law: '에너지이용 합리화법', checkedAt: '2026-08-20', needsReview: false }
+]);
+eq(reviewed.length, 0, '설비별 최신 법령 검토 기록을 확인일로 사용한다');
+
+const recheck = L.needsReview([
+  { id: 'eq1', name: 'A', kind: '보일러', cycleMonths: 12, capacity: '1.5 t/h' }
+], '2026-08-26', 365, [
+  { equipmentId: 'eq1', checkedAt: '2026-08-20', needsReview: true }
+]);
+ok(/재검토/.test(recheck[0].reasons.join()), '재검토 필요 표시를 확인 필요 목록에 반영한다');
+
+/* ── ⑤ 저장 자료 v1 → v2 하위호환 ───────────────────────────────── */
+
+const migrated = St.normalize({
+  equipments: [{ id: 'eq1', name: '온수보일러', building: '본관' }],
+  history: [], consumables: [], energy: []
+});
+eq(migrated.schemaVersion, 2, '이전 자료를 현재 스키마 버전으로 올린다');
+ok(Array.isArray(migrated.manuals) && Array.isArray(migrated.lawReviews),
+   '  매뉴얼·법령 검토 컬렉션을 빈 배열로 보완한다');
+eq(migrated.buildings[0].name, '본관', '  설비의 건물명으로 좌표 레코드를 만든다');
+ok(['x', 'y', 'w', 'h'].every(k => Number.isFinite(migrated.buildings[0][k])),
+   '  조감도 좌표가 설비와 분리되어 있다');
+eq(St.forEquipment([
+  { equipmentId: 'eq1', name: 'A' }, { equipmentId: 'eq2', name: 'B' }
+], 'eq1').map(x => x.name), ['A'], '설비 ID 기준으로 관련 데이터를 필터링한다');
+
+const removed = St.removeEquipment({
+  equipments: [{ id: 'eq1' }, { id: 'eq2' }],
+  history: [{ equipmentId: 'eq1' }, { equipmentId: 'eq2' }],
+  consumables: [{ equipmentId: 'eq1' }],
+  manuals: [{ equipmentId: 'eq1' }],
+  lawReviews: [{ equipmentId: 'eq1' }],
+  buildings: [], energy: []
+}, 'eq1');
+eq(removed.equipments.map(x => x.id), ['eq2'], '설비를 삭제한다');
+eq(removed.history.map(x => x.equipmentId), ['eq2'], '  다른 설비 이력은 남긴다');
+ok(['consumables', 'manuals', 'lawReviews'].every(k => removed[k].length === 0),
+   '  연결된 소모품·매뉴얼·법령 기록도 함께 삭제한다');
+
+/* ── ⑥ 에너지 사용량 읽기 ────────────────────────────────────────── */
 
 let g = E.parseUsage(`
 2026년 1월 전력 사용량 125,400 kWh 요금 18,310,000 원
@@ -173,6 +226,25 @@ g = E.parseUsage('2026-03  가스  3,210 m3');
 eq(g.rows[0].ym, '2026-03', 'YYYY-MM 형식도 읽는다');
 eq(g.rows[0].unit, 'm3', '단위를 그대로 둔다');
 eq(g.rows[0].cost, null, '요금이 없으면 0 이 아니라 null');
+
+g = E.parseUsage('2026년 7월 전력 사용량 98,700 kWh');
+eq(g.rows[0].ym, '2026-07', '1월이 없어도 7월 한 달만 읽는다');
+
+g = E.parseUsage('2026년 전기요금 고지서\n청구월 7월\n사용량 88,400 kWh');
+eq(g.rows[0].ym, '2026-07', '연도와 월·사용량이 다른 줄이어도 조합한다');
+
+g = E.parseUsage(`
+2026년 7월 수도 사용량 1,200 m3
+2026년 7월 도시가스 사용량 3,400 Nm3
+2026년 7월 압축공기 사용량 8,900 Nm3
+`);
+eq(g.rows.length, 3, '같은 달의 서로 다른 에너지 종류를 모두 남긴다');
+eq(g.rows.map(r => r.kind).sort(), ['가스', '수도', '압축공기'].sort(),
+   '수도·가스·압축공기를 기타가 아닌 별도 종류로 나눈다');
+eq(Object.keys(E.groupByKind(g.rows)).sort(), ['가스', '수도', '압축공기'].sort(),
+   '수도·가스·압축공기가 각각 별도 그래프 묶음이 된다');
+eq(E.CHART_KINDS, ['전력', '수도', '가스', '압축공기'],
+   '월별 그래프는 기타 없이 전력·수도·가스·압축공기 네 종류로 고정한다');
 
 g = E.parseUsage('아무 숫자도 없는 글');
 eq(g.rows.length, 0, '못 읽으면 빈 배열');

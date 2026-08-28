@@ -93,6 +93,40 @@
     });
   }
 
+  function value(v) { return v == null ? '' : String(v).trim(); }
+
+  /**
+   * 상세 화면용 후보. 설비 종류로 후보를 좁히되, 입력된 사양은 검토 근거로만 보여 준다.
+   * 용량·압력 값으로 적용 여부나 검사 주기를 자동 판정하지 않는다.
+   */
+  function lawsForEquipment(equipment) {
+    var e = equipment || {};
+    var facts = [
+      ['설비명', e.name], ['종류', e.kind], ['사양', e.spec], ['용량', e.capacity],
+      ['유량', e.flow], ['압력', e.pressure], ['냉난방용량', e.hvac]
+    ].filter(function (x) { return value(x[1]); });
+    var missing = [
+      ['사양', e.spec], ['용량', e.capacity], ['압력', e.pressure], ['냉난방용량', e.hvac]
+    ].filter(function (x) { return !value(x[1]); }).map(function (x) { return x[0]; });
+    var basis = facts.map(function (x) { return x[0] + ' ' + value(x[1]); }).join(' · ');
+    return lawsFor(e.kind).map(function (x) {
+      return {
+        law: x.law,
+        about: x.about,
+        cycleMonths: null,
+        basis: basis,
+        missing: missing.slice()
+      };
+    });
+  }
+
+  function latestReview(equipmentId, lawReviews) {
+    var mine = (lawReviews || []).filter(function (r) {
+      return r.equipmentId === equipmentId && parse(r.checkedAt);
+    }).sort(function (a, b) { return a.checkedAt < b.checkedAt ? 1 : -1; });
+    return mine.length ? mine[0] : null;
+  }
+
   /** 며칠 지났는지 */
   function daysSince(dateStr, today) {
     var a = parse(dateStr), b = parse(today) || new Date();
@@ -117,20 +151,26 @@
    *
    * @param staleDays 며칠이 지나면 다시 확인할지 (기본 365)
    */
-  function needsReview(equipments, today, staleDays) {
+  function needsReview(equipments, today, staleDays, lawReviews) {
     var limit = staleDays === undefined ? 365 : staleDays;
     var out = [];
     (equipments || []).forEach(function (e) {
       var reasons = [];
-      var d = daysSince(e.lawCheckedAt, today);
+      var review = latestReview(e.id, lawReviews);
+      var checkedAt = review ? review.checkedAt : e.lawCheckedAt;
+      var d = daysSince(checkedAt, today);
       if (d === null) reasons.push('법령을 확인한 기록이 없습니다');
       else if (d > limit) reasons.push('확인한 지 ' + d + '일 지났습니다');
+
+      if (review && review.needsReview === true) {
+        reasons.push('최근 검토에서 재검토 필요로 표시했습니다');
+      }
 
       if (!e.cycleMonths || Number(e.cycleMonths) <= 0) {
         reasons.push('법정검사 주기가 입력되지 않았습니다 — 용량·종별에 따라 다르므로 확인이 필요합니다');
       }
       // 법령을 대조하려면 사양이 있어야 한다. 없으면 비교 자체가 안 된다.
-      if (!e.spec || !String(e.spec).trim()) {
+      if (![e.spec, e.capacity, e.pressure, e.hvac].some(function (v) { return value(v); })) {
         reasons.push('사양이 비어 있어 법령 적용 여부를 대조할 수 없습니다');
       }
       if (reasons.length) out.push({ id: e.id, name: e.name, kind: e.kind, reasons: reasons });
@@ -138,5 +178,8 @@
     return out;
   }
 
-  return { KINDS: KINDS, lawsFor: lawsFor, needsReview: needsReview, SEARCH: SEARCH };
+  return {
+    KINDS: KINDS, lawsFor: lawsFor, lawsForEquipment: lawsForEquipment,
+    latestReview: latestReview, needsReview: needsReview, SEARCH: SEARCH
+  };
 });
