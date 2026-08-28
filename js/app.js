@@ -511,19 +511,25 @@
       $('#manual-status').innerHTML = '<div class="note">' + esc(file.name) + '을 업로드하고 분석하고 있습니다.</div>';
       renderDetailManuals(e);
     }
-    Promise.all([readDocumentText(file).catch(function () { return ''; }), I.upload(db.settings, e.id, '매뉴얼', file)])
-      .then(function (values) {
-        var documentText = values[0], upload = values[1];
-        o.storageStatus = upload.ok ? '공유폴더 저장 완료' : '브라우저 임시 저장';
-        if (upload.ok) { o.storagePath = upload.path; o.filePath = upload.path; }
+    /* 공유폴더 서버가 꺼져 있어도 브라우저 안의 문서 분석을 기다리게 하지 않는다.
+     * 파일 저장과 본문 분석은 독립적으로 끝나며, 각각 끝나는 즉시 화면을 갱신한다. */
+    I.upload(db.settings, e.id, '매뉴얼', file).then(function (upload) {
+      o.storageStatus = upload.ok ? '공유폴더 저장 완료' : '브라우저 임시 저장';
+      if (upload.ok) { o.storagePath = upload.path; o.filePath = upload.path; }
+      persist();
+      if (detailEquipment() && detailEquipment().id === e.id) renderDetailManuals(e);
+    });
+
+    readDocumentText(file).catch(function () { return ''; })
+      .then(function (documentText) {
         var fallback = A.manual(documentText);
         if (!documentText) {
           fallback.warnings.push('이 형식은 원본 저장만 했습니다. PDF·TXT·CSV·엑셀 파일로 변환하면 본문 분석이 가능합니다.');
         }
-        if (!documentText || db.settings.aiMode === 'rules') return { result: fallback, server: upload };
+        if (!documentText || db.settings.aiMode === 'rules') return { result: fallback };
         return I.analyze(db.settings, 'manual', e, documentText).then(function (ai) {
           var parsed = ai.ok && A.normalizeAi('manual', ai.result);
-          return { result: parsed || fallback, server: upload, provider: parsed ? ai.provider : 'rules' };
+          return { result: parsed || fallback, provider: parsed ? ai.provider : 'rules' };
         });
       }).then(function (done) {
         o.analysis = done.result; o.analysis.provider = done.provider || o.analysis.provider || 'rules';
