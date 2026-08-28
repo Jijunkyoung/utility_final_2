@@ -216,6 +216,15 @@ function serve(port) {
     ok(chartTitles.map(function (t) { return t.replace(/\s*\(.*/, ''); }).join('|') === '전력|수도|가스|압축공기',
        '기타 없이 네 종류 그래프만 정해진 순서로 보인다');
     ok(await page.isVisible('#drop'), '고지서를 끌어다 놓는 자리가 보인다');
+    await page.click('#paste-toggle');
+    ok(await page.isVisible('#paste') && await page.isVisible('#paste-apply'),
+       '글 입력창을 열면 적용 버튼이 함께 보인다');
+    await page.fill('#paste', '2028년 7월 수도 사용량 1,234 m3');
+    ok(await page.isEnabled('#paste-apply'), '글을 입력해야 적용 버튼이 활성화된다');
+    await page.click('#paste-apply');
+    ok((await page.textContent('#energy-table')).indexOf('2028-07') >= 0
+       && (await page.textContent('#read-note')).indexOf('적용했습니다') >= 0,
+       '적용 버튼을 눌러 붙여넣은 사용량을 표와 그래프 데이터에 반영한다');
 
     group('8. 조감도 — 건물을 눌러 그 건물 설비 보기');
     await go('map.html');

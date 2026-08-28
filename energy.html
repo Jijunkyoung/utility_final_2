@@ -58,13 +58,19 @@
   <ul class="filelist" id="files"></ul>
   <div id="read-note"></div>
   <div class="btnrow">
-    <button class="btn" id="paste-toggle">글로 붙여넣기</button>
+    <button class="btn" id="paste-toggle" type="button" aria-controls="paste-panel" aria-expanded="false">글로 붙여넣기</button>
     <button class="btn" id="energy-xlsx" disabled>엑셀로 내보내기</button>
     <button class="btn" id="energy-clear">비우기</button>
   </div>
-  <textarea id="paste" rows="7" hidden placeholder="2026년 1월 전력 사용량 125,400 kWh 요금 18,310,000 원"
-    style="width:100%;margin-top:12px;font-family:ui-monospace,monospace;font-size:13px;
-           padding:12px;border:1px solid var(--line);border-radius:8px"></textarea>
+  <div id="paste-panel" class="paste-panel" hidden>
+    <label for="paste"><b>고지서 내용을 붙여넣으세요</b></label>
+    <p class="sub">연월·종류·사용량이 포함된 글을 넣은 뒤 적용 버튼을 누릅니다.</p>
+    <textarea id="paste" rows="7" placeholder="2026년 7월 전력 사용량 125,400 kWh 요금 18,310,000 원"></textarea>
+    <div class="paste-actions">
+      <span class="sub">Ctrl + Enter로도 적용할 수 있습니다.</span>
+      <button class="btn primary" id="paste-apply" type="button" disabled>적용</button>
+    </div>
+  </div>
 </div>
 
 <h2>월별 사용량</h2>

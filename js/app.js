@@ -801,12 +801,30 @@
     input.addEventListener('change', function () { readFiles(input.files); input.value = ''; });
 
     $('#paste-toggle').addEventListener('click', function () {
-      var ta = $('#paste');
-      ta.hidden = !ta.hidden;
-      if (!ta.hidden) ta.focus();
+      var panel = $('#paste-panel');
+      panel.hidden = !panel.hidden;
+      this.setAttribute('aria-expanded', String(!panel.hidden));
+      if (!panel.hidden) $('#paste').focus();
     });
     $('#paste').addEventListener('input', function () {
-      ingest(E.parseUsage(this.value), '붙여넣은 글');
+      $('#paste-apply').disabled = !this.value.trim();
+    });
+    $('#paste').addEventListener('keydown', function (e) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && this.value.trim()) {
+        e.preventDefault();
+        $('#paste-apply').click();
+      }
+    });
+    $('#paste-apply').addEventListener('click', function () {
+      var ta = $('#paste');
+      var text = ta.value.trim();
+      if (!text) return;
+      var g = E.parseUsage(text);
+      ingest(g, '붙여넣은 글');
+      if (g.rows.length) {
+        ta.value = '';
+        this.disabled = true;
+      }
     });
     $('#energy-xlsx').addEventListener('click', exportEnergyXlsx);
     $('#energy-clear').addEventListener('click', function () {
@@ -901,6 +919,9 @@
     if (g.note) {
       note.innerHTML = '<div class="' + (g.rows.length ? 'note' : 'warn') + '">'
         + esc(source) + ' — ' + esc(g.note) + '</div>';
+    } else if (g.rows.length) {
+      note.innerHTML = '<div class="ok">' + esc(source) + ' — '
+        + g.rows.length + '건을 적용했습니다.</div>';
     }
     if (!g.rows.length) return;
     // 같은 연월+종류는 새 값으로 덮는다

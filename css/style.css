@@ -67,6 +67,18 @@ input[type=file]{display:none;}
 .btn:disabled{opacity:.45; cursor:not-allowed;}
 .btnrow{display:flex; flex-wrap:wrap; gap:8px; margin-top:14px;}
 
+.paste-panel{margin-top:14px; padding:16px; border:1px solid var(--line); border-radius:10px;
+  background:#f8fafc;}
+.paste-panel>label{display:block; margin-bottom:2px;}
+.paste-panel .sub{margin-bottom:9px;}
+.paste-panel textarea{display:block; width:100%; min-height:150px; resize:vertical;
+  padding:12px; border:1px solid #b8c5d1; border-radius:8px; background:#fff; color:var(--ink);
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:13px; line-height:1.55;}
+.paste-panel textarea:focus{outline:2px solid var(--accent); outline-offset:-1px;}
+.paste-actions{display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:10px;}
+.paste-actions .sub{margin:0;}
+@media (max-width:640px){.paste-actions{align-items:stretch; flex-direction:column;}.paste-actions .btn{width:100%;}}
+
 .note{border-left:4px solid var(--accent); background:#eef6fa; color:#0b3a4f;
   padding:13px 15px; border-radius:8px; font-size:14px; margin:14px 0;}
 .warn{border-left:4px solid var(--danger); background:#fdeae7; color:#7a1a0c;
