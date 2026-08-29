@@ -39,6 +39,7 @@
     <li><a href="cost.html">비용</a></li>
     <li><a href="energy.html">에너지</a></li>
     <li><a href="map.html">조감도</a></li>
+    <li><a href="settings.html">설정</a></li>
   </ul>
 </div></nav>
 
@@ -92,6 +93,7 @@
       <div class="register-row"><label for="eq-cycle">검사주기</label><div class="input-with-unit"><input id="eq-cycle" name="cycleMonths" type="number" min="1" step="1" placeholder="12"><span>개월</span></div></div>
       <div class="register-row"><label for="eq-cost">검사비용</label><div class="input-with-unit"><input id="eq-cost" name="inspectCost" type="number" min="0" step="1000" placeholder="0"><span>원</span></div></div>
       <div class="register-row"><label for="eq-law-date">법령 확인일</label><input id="eq-law-date" name="lawCheckedAt" type="date"></div>
+      <div class="register-row"><label for="eq-manual-file">매뉴얼 업로드</label><div class="register-control"><label class="btn file-button" id="eq-manual-file-button" for="eq-manual-file">파일 선택</label><input id="eq-manual-file" type="file" accept=".pdf,.txt,.csv,.xlsx,.xls,.docx"><span class="sub" id="eq-manual-file-name">설비 저장 후 공유폴더에 업로드하고 분석합니다.</span></div></div>
     </form>
     <div id="law-hint"></div>
     <div class="register-actions">
@@ -147,17 +149,32 @@
 	      <label>문서명 <input name="title" required placeholder="운전·정비 매뉴얼"></label>
 	      <label>버전 <input name="version" placeholder="Rev.1"></label>
 	      <label style="grid-column:span 2">사내/로컬 파일 경로 <input name="filePath" placeholder="\\fileserver\facility\manual.pdf"></label>
-	      <label>파일 메타데이터 <span class="btn file-button" id="manual-file-label">파일 선택</span><input id="manual-file" type="file"></label>
+	      <label>매뉴얼 파일 <span class="btn file-button" id="manual-file-label">파일 선택</span><input id="manual-file" type="file" accept=".pdf,.txt,.csv,.xlsx,.xls,.docx"></label>
 	      <label>메모 <input name="note"></label>
 	    </form>
-	    <p class="sub">파일 내용은 저장하지 않고 파일명·크기·수정일과 입력한 경로만 저장합니다.</p>
-	    <div class="btnrow"><button class="btn primary" id="detail-manual-save" type="button">매뉴얼 추가</button></div>
+	    <p class="sub">사내 서버가 연결되면 원본은 설정한 공유폴더에 저장합니다. 연결 전에는 메타데이터와 분석 결과만 브라우저에 임시 저장합니다.</p>
+	    <div id="manual-status"></div>
+	    <div class="btnrow"><button class="btn primary" id="detail-manual-save" type="button">업로드·분석</button></div>
 	    <ul class="detail-list" id="detail-manuals"></ul>
+	    <div id="detail-manual-analysis"></div>
 	  </section>
 
 	  <section class="detail-panel" data-detail-panel="laws" hidden>
-	    <div class="note"><b>법령 후보는 적용 확정이 아닙니다.</b> 설비 종류와 입력 사양을 바탕으로 확인할 자료를 제시할 뿐이며 검사주기는 자동으로 정하지 않습니다. 폐쇄망에서는 아래에 저장한 사내 법령 자료를 기준으로 검토하세요.</div>
+	    <div class="note"><b>법령 후보는 적용 확정이 아닙니다.</b> 후보를 내부 DB에 저장한 뒤 법령 원문과 설비 사양을 비교 검토합니다. 자동 결과는 담당자가 최종 확인해야 합니다.</div>
 	    <div id="detail-law-candidates"></div>
+	    <h3 class="detail-subtitle">내부 DB에 저장한 법령</h3>
+	    <div id="detail-law-documents"></div>
+	    <form id="detail-law-document-form" class="grid-form compact-form">
+	      <label>선택 법령 <input name="law" readonly placeholder="위 후보에서 저장할 법령을 선택하세요"></label>
+	      <label>시행일/기준일 <input name="effectiveDate" type="date"></label>
+	      <label style="grid-column:1/-1">법령 원문 또는 적용 조항 <textarea name="content" rows="7" placeholder="국가법령정보센터에서 확인한 적용 조항을 붙여넣거나 법령 파일을 선택하세요."></textarea></label>
+	      <label>법령 파일 <span class="btn file-button" id="law-file-label">파일 선택</span><input id="law-file" type="file" accept=".pdf,.txt,.hwp,.docx"></label>
+	    </form>
+	    <div class="btnrow">
+	      <button class="btn primary" id="detail-law-document-save" type="button">법령 원문 저장</button>
+	      <button class="btn green" id="detail-law-review-run" type="button">저장 법령 비교 검토</button>
+	    </div>
+	    <div id="detail-law-comparison"></div>
 	    <h3 class="detail-subtitle">검토 기록 추가</h3>
 	    <form id="detail-law-form" class="grid-form compact-form">
 	      <label>법령명 <input name="law" required></label>
@@ -175,7 +192,7 @@
 
 <footer><div class="wrap">
   <p>Facility AI — 캠퍼스 유틸리티 설비·에너지 통합 관리.
-     자료는 <b>이 브라우저에만</b> 저장됩니다. 다른 PC 로 옮기려면 설비 화면의 내보내기를 쓰세요.</p>
+     사내 서버가 연결되면 파일은 설정한 공유폴더에, 연결 전 임시 자료는 이 브라우저에 저장됩니다.</p>
   <p class="sub">문의 dreamitbiz@naver.com · 010-2634-2426 · 카카오톡 aebon</p>
 </div></footer>
 
@@ -184,6 +201,8 @@
 <script src="js/schedule.js"></script>
 <script src="js/law.js"></script>
 <script src="js/energy.js"></script>
+<script src="js/analysis.js"></script>
+<script src="js/integration.js"></script>
 <script src="js/app.js"></script>
 
 </body>

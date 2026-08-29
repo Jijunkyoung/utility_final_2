@@ -9,9 +9,13 @@
   'use strict';
 
   var S = window.Schedule, L = window.Law, E = window.Energy, St = window.Store;
+  var A = window.Analysis, I = window.Integration;
   var db = St.load();
   var currentDetailEquipmentId = null;
   var selectedManualFile = null;
+  var selectedRegistrationManualFile = null;
+  var selectedLawFile = null;
+  var currentLawDocumentId = null;
 
   /* ────────────────────────────────────────────────────────── 도구 */
 
@@ -177,10 +181,20 @@
       ensureBuilding(o.building);
       db.equipments.push(o);
       if (persist()) {
-        f.reset(); syncOtherKind(false); renderEquipment(); closeCreateDialog();
+        var registrationFile = selectedRegistrationManualFile;
+        f.reset(); selectedRegistrationManualFile = null;
+        $('#eq-manual-file-button').textContent = '파일 선택';
+        $('#eq-manual-file-name').textContent = '설비 저장 후 공유폴더에 업로드하고 분석합니다.';
+        syncOtherKind(false); renderEquipment(); closeCreateDialog();
+        if (registrationFile) addManualAndAnalyze(o, registrationFile, registrationFile.name);
       }
     });
-    $('#eq-clear').addEventListener('click', function () { $('#eq-form').reset(); syncOtherKind(false); });
+    $('#eq-clear').addEventListener('click', function () {
+      $('#eq-form').reset(); selectedRegistrationManualFile = null;
+      $('#eq-manual-file-button').textContent = '파일 선택';
+      $('#eq-manual-file-name').textContent = '설비 저장 후 공유폴더에 업로드하고 분석합니다.';
+      syncOtherKind(false);
+    });
 
     $('#export').addEventListener('click', exportJson);
     $('#import-file').addEventListener('change', importJson);
@@ -199,9 +213,21 @@
     $('#detail-history-save').addEventListener('click', saveDetailHistory);
     $('#detail-manual-save').addEventListener('click', saveDetailManual);
     $('#detail-law-save').addEventListener('click', saveDetailLaw);
+    $('#detail-law-document-save').addEventListener('click', saveLawDocumentContent);
+    $('#detail-law-review-run').addEventListener('click', runLawReview);
+    $('#eq-manual-file').addEventListener('change', function () {
+      selectedRegistrationManualFile = this.files && this.files[0] || null;
+      $('#eq-manual-file-button').textContent = selectedRegistrationManualFile ? '다시 선택' : '파일 선택';
+      $('#eq-manual-file-name').textContent = selectedRegistrationManualFile
+        ? selectedRegistrationManualFile.name : '설비 저장 후 공유폴더에 업로드하고 분석합니다.';
+    });
     $('#manual-file').addEventListener('change', function () {
       selectedManualFile = this.files && this.files[0] || null;
       $('#manual-file-label').textContent = selectedManualFile ? selectedManualFile.name : '파일 선택';
+    });
+    $('#law-file').addEventListener('change', function () {
+      selectedLawFile = this.files && this.files[0] || null;
+      $('#law-file-label').textContent = selectedLawFile ? selectedLawFile.name : '파일 선택';
     });
 
     renderEquipment();
@@ -297,8 +323,13 @@
     $('#detail-title').textContent = e.name || '설비 상세';
     $('#detail-code').textContent = (e.code || '설비번호 없음') + ' · ' + (e.kind || '종류 미입력');
     selectedManualFile = null;
+    selectedLawFile = null;
+    currentLawDocumentId = null;
     $('#manual-file').value = '';
     $('#manual-file-label').textContent = '파일 선택';
+    $('#law-file').value = '';
+    $('#law-file-label').textContent = '파일 선택';
+    $('#detail-law-document-form').reset();
     $('#detail-history-form [name=date]').value = today();
     $('#detail-law-form [name=checkedAt]').value = today();
     showDetailTab('basic');
@@ -450,19 +481,84 @@
   function saveDetailManual() {
     var e = detailEquipment(), f = $('#detail-manual-form');
     if (!e || !f.reportValidity()) return;
-    var o = { id: St.newId('m'), equipmentId: e.id, addedAt: new Date().toISOString() };
-    $$('[name]', f).forEach(function (i) { o[i.name] = i.value.trim(); });
-    if (selectedManualFile) {
-      o.fileName = selectedManualFile.name;
-      o.fileSize = selectedManualFile.size;
-      o.fileType = selectedManualFile.type;
-      o.fileLastModified = selectedManualFile.lastModified;
+    var meta = {}; $$('[name]', f).forEach(function (i) { meta[i.name] = i.value.trim(); });
+    /* change 이벤트 상태만 믿지 않고 실제 input의 File도 다시 읽는다.
+     * 자동화 도구·보안 브라우저가 파일을 주입할 때 change 이벤트가 생략돼도 동작한다. */
+    var inputFile = $('#manual-file').files && $('#manual-file').files[0];
+    var manualFile = inputFile || selectedManualFile;
+    if (manualFile) {
+      addManualAndAnalyze(e, manualFile, meta.title, meta);
+    } else {
+      var o = Object.assign({ id: St.newId('m'), equipmentId: e.id, addedAt: new Date().toISOString(),
+        storageStatus: '경로만 저장' }, meta);
+      db.manuals.push(o);
+      if (persist()) renderDetailManuals(e);
     }
-    db.manuals.push(o);
-    if (persist()) {
-      f.reset(); selectedManualFile = null; $('#manual-file-label').textContent = '파일 선택';
+    f.reset(); selectedManualFile = null; $('#manual-file').value = '';
+    $('#manual-file-label').textContent = '파일 선택';
+  }
+
+  function readDocumentText(file) {
+    if (!file) return Promise.resolve('');
+    if (/\.pdf$/i.test(file.name)) return readPdf(file);
+    if (/\.(xlsx?|csv)$/i.test(file.name)) return readSheet(file);
+    if (/\.(txt|md|json|xml)$/i.test(file.name) || /^text\//.test(file.type || '')) return file.text();
+    return Promise.resolve('');
+  }
+
+  function addManualAndAnalyze(e, file, title, meta) {
+    var o = Object.assign({ id: St.newId('m'), equipmentId: e.id, addedAt: new Date().toISOString(),
+      title: title || file.name, fileName: file.name, fileSize: file.size, fileType: file.type,
+      fileLastModified: file.lastModified, storageStatus: '업로드·분석 중' }, meta || {});
+    db.manuals.push(o); persist();
+    function currentManual() {
+      return db.manuals.find(function (m) { return m.id === o.id; }) || o;
+    }
+    if (detailEquipment() && detailEquipment().id === e.id) {
+      $('#manual-status').innerHTML = '<div class="note">' + esc(file.name) + '을 업로드하고 분석하고 있습니다.</div>';
       renderDetailManuals(e);
     }
+    /* 공유폴더 서버가 꺼져 있어도 브라우저 안의 문서 분석을 기다리게 하지 않는다.
+     * 파일 저장과 본문 분석은 독립적으로 끝나며, 각각 끝나는 즉시 화면을 갱신한다. */
+    I.upload(db.settings, e.id, '매뉴얼', file).then(function (upload) {
+      var manual = currentManual();
+      manual.storageStatus = upload.ok ? '공유폴더 저장 완료' : '브라우저 임시 저장';
+      if (upload.ok) { manual.storagePath = upload.path; manual.filePath = upload.path; }
+      persist();
+      if (detailEquipment() && detailEquipment().id === e.id) renderDetailManuals(e);
+    });
+
+    readDocumentText(file).catch(function () { return ''; })
+      .then(function (documentText) {
+        var fallback = A.manual(documentText);
+        if (!documentText) {
+          fallback.warnings.push('이 형식은 원본 저장만 했습니다. PDF·TXT·CSV·엑셀 파일로 변환하면 본문 분석이 가능합니다.');
+        }
+        if (!documentText || db.settings.aiMode === 'rules') return { result: fallback };
+        return I.analyze(db.settings, 'manual', e, documentText).then(function (ai) {
+          var parsed = ai.ok && A.normalizeAi('manual', ai.result);
+          return { result: parsed || fallback, provider: parsed ? ai.provider : 'rules' };
+        });
+      }).then(function (done) {
+        var manual = currentManual();
+        manual.analysis = done.result;
+        manual.analysis.provider = done.provider || manual.analysis.provider || 'rules';
+        manual.analyzedAt = new Date().toISOString();
+        var savedAnalysis = { id: St.newId('a'), equipmentId: e.id, sourceId: manual.id,
+          kind: 'manual', createdAt: manual.analyzedAt, result: manual.analysis };
+        db.analysisResults.push(savedAnalysis); I.saveAnalysis(db.settings, savedAnalysis);
+        persist();
+        if (detailEquipment() && detailEquipment().id === e.id) {
+          $('#manual-status').innerHTML = '<div class="ok">' + esc(manual.title) + ' — ' + esc(manual.storageStatus)
+            + ' · 분석 완료</div>';
+          renderDetailManuals(e);
+        }
+      }).catch(function (err) {
+        var manual = currentManual();
+        manual.storageStatus = '분석 실패'; manual.analysisError = err && err.message || String(err); persist();
+        if ($('#manual-status')) $('#manual-status').innerHTML = '<div class="warn">분석하지 못했습니다: '
+          + esc(manual.analysisError) + '</div>';
+      });
   }
 
   function formatBytes(n) {
@@ -488,7 +584,7 @@
     }
     $('#detail-manuals').innerHTML = list.length ? list.map(function (m) {
       var path = m.filePath || m.fileName || '경로/파일명 미입력';
-      var meta = [m.version, m.fileName, formatBytes(m.fileSize), m.note].filter(Boolean).join(' · ');
+      var meta = [m.version, m.fileName, formatBytes(m.fileSize), m.storageStatus, m.note].filter(Boolean).join(' · ');
       return '<li><div><b>' + esc(m.title) + '</b><div class="meta">' + esc(path) + '</div>'
         + (meta ? '<div class="meta">' + esc(meta) + '</div>' : '') + '</div><div class="btnrow" style="margin:0">'
         + '<button class="btn small-btn" data-copy-path="' + esc(path) + '">경로 복사</button>'
@@ -502,6 +598,44 @@
       b.addEventListener('click', function () {
         db.manuals = db.manuals.filter(function (x) { return x.id !== b.getAttribute('data-manual-del'); });
         if (persist()) renderDetailManuals(e);
+      });
+    });
+
+    var analyzed = list.filter(function (m) { return m.analysis; });
+    $('#detail-manual-analysis').innerHTML = analyzed.map(function (m) {
+      var a = m.analysis, proposals = [];
+      (a.consumables || []).forEach(function (p, i) {
+        proposals.push('<div class="proposal-item"><b>소모품 · ' + esc(p.name) + '</b><span>'
+          + esc(p.cycleText || '주기 미확인') + '</span><span class="evidence">' + esc(p.evidence) + '</span>'
+          + '<button class="btn small-btn" data-apply-manual-consumable="' + esc(m.id) + ':' + i + '">일정 등록</button></div>');
+      });
+      (a.inspections || []).forEach(function (p, i) {
+        proposals.push('<div class="proposal-item"><b>검사 · ' + esc(p.name) + '</b><span>'
+          + esc(p.cycleText || '주기 미확인') + '</span><span class="evidence">' + esc(p.evidence) + '</span>'
+          + '<button class="btn small-btn" data-apply-manual-inspection="' + esc(m.id) + ':' + i + '">검사주기 반영</button></div>');
+      });
+      return '<section class="analysis-card"><h4>' + esc(m.title) + ' 분석 요약 <span class="sub">(' + esc(a.provider || 'rules')
+        + ')</span></h4><p>' + esc(a.summary || '요약 없음') + '</p>'
+        + ((a.warnings || []).length ? '<div class="security-note">' + esc(a.warnings.join(' · ')) + '</div>' : '')
+        + '<div class="proposal-list">' + (proposals.join('') || '<span class="sub">추출된 교체·검사주기가 없습니다.</span>') + '</div></section>';
+    }).join('');
+    $$('[data-apply-manual-consumable]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var parts = b.getAttribute('data-apply-manual-consumable').split(':'), manual = db.manuals.find(function (m) { return m.id === parts[0]; });
+        var p = manual && manual.analysis && manual.analysis.consumables[Number(parts[1])];
+        if (!p || !p.cycleMonths) { alert('개월 단위로 확인된 주기가 없습니다. 근거를 확인해 직접 입력하세요.'); return; }
+        db.consumables.push({ id: St.newId('c'), equipmentId: e.id, name: p.name,
+          cycleMonths: Number(p.cycleMonths), lastDate: '', cost: null, note: '매뉴얼 분석 제안 · ' + p.evidence });
+        if (persist()) { renderDetailConsumables(e); b.textContent = '등록됨'; b.disabled = true; }
+      });
+    });
+    $$('[data-apply-manual-inspection]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var parts = b.getAttribute('data-apply-manual-inspection').split(':'), manual = db.manuals.find(function (m) { return m.id === parts[0]; });
+        var p = manual && manual.analysis && manual.analysis.inspections[Number(parts[1])];
+        if (!p || !p.cycleMonths) { alert('개월 단위로 확인된 검사주기가 없습니다. 근거를 확인해 직접 입력하세요.'); return; }
+        e.cycleMonths = Number(p.cycleMonths);
+        if (persist()) { renderDetailBasic(e); renderEquipment(); b.textContent = '반영됨'; b.disabled = true; }
       });
     });
   }
@@ -520,6 +654,97 @@
     }
   }
 
+  function saveLawCandidate(e, candidate) {
+    var existing = St.forEquipment(db.lawDocuments, e.id).find(function (d) { return d.law === candidate.law; });
+    var doc = existing || { id: St.newId('ld'), equipmentId: e.id, law: candidate.law,
+      about: candidate.about, basis: candidate.basis, missing: candidate.missing,
+      sourceUrl: L.SEARCH + encodeURIComponent(candidate.law), content: '', addedAt: new Date().toISOString() };
+    if (!existing) db.lawDocuments.push(doc);
+    currentLawDocumentId = doc.id;
+    $('#detail-law-form [name=law]').value = doc.law;
+    $('#detail-law-document-form [name=law]').value = doc.law;
+    $('#detail-law-document-form [name=effectiveDate]').value = doc.effectiveDate || '';
+    $('#detail-law-document-form [name=content]').value = doc.content || '';
+    persist(); renderDetailLaws(e);
+    I.saveLaw(db.settings, doc).then(function (r) {
+      doc.serverStored = !!r.ok; if (r.ok) persist();
+      if (r.ok && db.settings.lawApiOc) {
+        I.importLaw(db.settings, doc).then(function (found) {
+          if (!found.ok || !found.document) return;
+          Object.assign(doc, found.document, { serverStored: true, importedAt: new Date().toISOString() });
+          persist(); renderDetailLaws(e);
+        });
+      }
+    });
+  }
+
+  function selectLawDocument(e, id) {
+    var doc = db.lawDocuments.find(function (d) { return d.id === id && d.equipmentId === e.id; });
+    if (!doc) return;
+    currentLawDocumentId = id;
+    $('#detail-law-document-form [name=law]').value = doc.law;
+    $('#detail-law-document-form [name=effectiveDate]').value = doc.effectiveDate || '';
+    $('#detail-law-document-form [name=content]').value = doc.content || '';
+    $('#detail-law-form [name=law]').value = doc.law;
+    renderDetailLaws(e);
+  }
+
+  function saveLawDocumentContent() {
+    var e = detailEquipment(), f = $('#detail-law-document-form');
+    if (!e || !currentLawDocumentId) { alert('먼저 위 법령 후보에서 내부 DB에 저장할 법령을 선택하세요.'); return; }
+    var doc = db.lawDocuments.find(function (d) { return d.id === currentLawDocumentId; });
+    if (!doc) return;
+    var finish = function (content) {
+      doc.effectiveDate = f.querySelector('[name=effectiveDate]').value;
+      doc.content = String(content || f.querySelector('[name=content]').value || '').trim();
+      doc.updatedAt = new Date().toISOString();
+      if (selectedLawFile) { doc.fileName = selectedLawFile.name; doc.fileSize = selectedLawFile.size; }
+      persist(); I.saveLaw(db.settings, doc); selectedLawFile = null; $('#law-file').value = '';
+      $('#law-file-label').textContent = '파일 선택'; renderDetailLaws(e);
+    };
+    if (selectedLawFile) {
+      Promise.all([readDocumentText(selectedLawFile), I.upload(db.settings, e.id, '법령', selectedLawFile)])
+        .then(function (values) {
+          if (values[1].ok) doc.filePath = values[1].path;
+          finish(values[0] || f.querySelector('[name=content]').value);
+        });
+    } else finish(f.querySelector('[name=content]').value);
+  }
+
+  function runLawReview() {
+    var e = detailEquipment(), docs = St.forEquipment(db.lawDocuments, currentDetailEquipmentId);
+    if (!e || !docs.length) { alert('먼저 관련 법령을 내부 DB에 저장하세요.'); return; }
+    var fallback = A.law(e, docs);
+    var text = docs.map(function (d) { return d.law + '\n' + (d.content || d.about || ''); }).join('\n\n');
+    $('#detail-law-comparison').innerHTML = '<div class="note">저장된 법령과 설비 사양을 비교하고 있습니다.</div>';
+    var job = db.settings.aiMode === 'rules' ? Promise.resolve({ result: fallback, provider: 'rules' })
+      : I.analyze(db.settings, 'law', e, text).then(function (ai) {
+          var parsed = ai.ok && A.normalizeAi('law', ai.result);
+          return { result: parsed || fallback, provider: parsed ? ai.provider : 'rules' };
+        });
+    job.then(function (done) {
+      done.result.provider = done.provider || done.result.provider || 'rules';
+      var saved = { id: St.newId('a'), equipmentId: e.id, kind: 'law', createdAt: new Date().toISOString(),
+        sourceIds: docs.map(function (d) { return d.id; }), result: done.result };
+      db.analysisResults.push(saved); persist(); I.saveAnalysis(db.settings, saved); renderLawComparison(saved.result);
+    });
+  }
+
+  function renderLawComparison(result) {
+    var box = $('#detail-law-comparison'); if (!box) return;
+    var rows = result && result.rows || [];
+    box.innerHTML = '<section class="analysis-card"><h4>설비 사양 비교 검토표 <span class="sub">('
+      + esc(result && result.provider || 'rules') + ')</span></h4>'
+      + '<p class="sub">' + esc(result && result.warning || '자동 결과는 참고용이며 담당자의 최종 확인이 필요합니다.') + '</p>'
+      + '<div class="tablewrap"><table class="comparison-table"><thead><tr><th>법령</th><th>법령 요구사항</th><th>설비 입력값</th><th>결과</th><th>근거</th><th>조치사항</th></tr></thead><tbody>'
+      + (rows.length ? rows.map(function (r) {
+          return '<tr><td>' + esc(r.law) + '</td><td>' + esc(r.requirement) + '</td><td><b>'
+            + esc(r.equipmentField) + '</b><br>' + esc(r.equipmentValue) + '</td><td>' + esc(r.status)
+            + '</td><td>' + esc(r.evidence) + '</td><td>' + esc(r.action) + '</td></tr>';
+        }).join('') : '<tr><td colspan="6" class="sub">비교할 법령 원문이 없습니다.</td></tr>')
+      + '</tbody></table></div></section>';
+  }
+
   function renderDetailLaws(e) {
     var candidates = L.lawsForEquipment(e);
     $('#detail-law-candidates').innerHTML = candidates.length
@@ -527,16 +752,43 @@
           return '<article class="law-candidate"><h4>' + esc(c.law) + '</h4><p>' + esc(c.about) + '</p>'
             + '<p><b>검토 입력값:</b> ' + esc(c.basis || '사양 미입력') + '</p>'
             + (c.missing.length ? '<p>추가 확인 권장: ' + esc(c.missing.join(', ')) + '</p>' : '')
-            + '<button class="btn small-btn" data-law-candidate="' + i + '">이 법령 검토 기록</button></article>';
+            + '<div class="btnrow"><a class="btn small-btn" href="' + esc(L.SEARCH + encodeURIComponent(c.law))
+            + '" target="_blank" rel="noopener">법령 확인</a>'
+            + '<button class="btn primary small-btn" data-law-candidate="' + i + '">내부 DB에 저장</button></div></article>';
         }).join('') + '</div>'
       : '<div class="note">이 설비 종류에 등록된 법령 후보가 없습니다. 사내 법령 자료를 확인한 뒤 아래에 직접 기록하세요.</div>';
     $$('#detail-law-candidates [data-law-candidate]').forEach(function (b) {
       b.addEventListener('click', function () {
         var c = candidates[Number(b.getAttribute('data-law-candidate'))];
-        $('#detail-law-form [name=law]').value = c ? c.law : '';
-        $('#detail-law-form [name=law]').focus();
+        if (c) saveLawCandidate(e, c);
       });
     });
+
+    var docs = St.forEquipment(db.lawDocuments, e.id);
+    $('#detail-law-documents').innerHTML = docs.length ? '<div class="law-document-grid">' + docs.map(function (d) {
+      return '<article class="law-document' + (d.id === currentLawDocumentId ? ' selected' : '') + '"><h4>'
+        + esc(d.law) + '</h4><p>' + esc(d.about || '') + '</p><p>'
+        + (d.content ? '원문/조항 ' + d.content.length.toLocaleString('ko-KR') + '자 저장' : '원문 미저장')
+        + (d.effectiveDate ? ' · 기준일 ' + esc(d.effectiveDate) : '') + '</p><div class="btnrow">'
+        + '<button class="btn small-btn" data-law-doc-select="' + esc(d.id) + '">선택·수정</button>'
+        + '<button class="btn small-btn" data-law-doc-del="' + esc(d.id) + '">삭제</button></div></article>';
+    }).join('') + '</div>' : '<p class="sub">내부 DB에 저장한 법령이 없습니다.</p>';
+    $$('[data-law-doc-select]').forEach(function (b) {
+      b.addEventListener('click', function () { selectLawDocument(e, b.getAttribute('data-law-doc-select')); });
+    });
+    $$('[data-law-doc-del]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var id = b.getAttribute('data-law-doc-del');
+        db.lawDocuments = db.lawDocuments.filter(function (d) { return d.id !== id; });
+        if (currentLawDocumentId === id) { currentLawDocumentId = null; $('#detail-law-document-form').reset(); }
+        if (persist()) renderDetailLaws(e);
+      });
+    });
+
+    var latestComparison = St.forEquipment(db.analysisResults, e.id).filter(function (a) { return a.kind === 'law'; })
+      .sort(function (a, b) { return a.createdAt < b.createdAt ? 1 : -1; })[0];
+    if (latestComparison) renderLawComparison(latestComparison.result);
+    else $('#detail-law-comparison').innerHTML = '';
 
     var list = St.forEquipment(db.lawReviews, e.id).sort(function (a, b) { return a.checkedAt < b.checkedAt ? 1 : -1; });
     $('#detail-laws tbody').innerHTML = list.length ? list.map(function (r) {
@@ -1050,6 +1302,71 @@
     }).join('') : '<tr><td colspan="8" class="sub">이 건물에 등록된 설비가 없습니다.</td></tr>';
   }
 
+  /* ═════════════════════════════════════════════ 사내 저장소·AI 설정 */
+
+  function setFormValues(form, values) {
+    $$('[name]', form).forEach(function (i) {
+      if (i.name === 'externalApiKey') return;
+      if (i.type === 'checkbox') i.checked = !!values[i.name];
+      else i.value = values[i.name] == null ? '' : values[i.name];
+    });
+  }
+
+  function settingsFromForms() {
+    var out = {};
+    $$('#storage-settings [name], #ai-settings [name], #law-api-settings [name]').forEach(function (i) {
+      if (i.name === 'externalApiKey') return;
+      out[i.name] = i.type === 'checkbox' ? i.checked : i.value.trim();
+    });
+    return out;
+  }
+
+  function statusLine(selector, good, message) {
+    $(selector).innerHTML = '<div class="status-line ' + (good ? 'good' : 'bad') + '">' + esc(message) + '</div>';
+  }
+
+  function initSettings() {
+    setFormValues($('#storage-settings'), db.settings);
+    setFormValues($('#ai-settings'), db.settings);
+    setFormValues($('#law-api-settings'), db.settings);
+
+    $('#storage-save').addEventListener('click', function () {
+      Object.assign(db.settings, settingsFromForms()); persist();
+      I.saveSettings(db.settings, '').then(function (r) {
+        statusLine('#storage-status', r.ok, r.ok ? '공유폴더 경로를 사내 서버 설정에 저장했습니다.'
+          : '경로는 이 브라우저에 저장했지만 사내 서버에는 연결하지 못했습니다.');
+      });
+    });
+    $('#server-test').addEventListener('click', function () {
+      Object.assign(db.settings, settingsFromForms());
+      statusLine('#storage-status', true, '사내 서버에 연결을 시험하고 있습니다.');
+      I.health(db.settings).then(function (r) {
+        statusLine('#storage-status', r.ok, r.ok ? '사내 서버 연결에 성공했습니다.' : '연결하지 못했습니다: ' + r.error);
+      });
+    });
+    $('#storage-test').addEventListener('click', function () {
+      Object.assign(db.settings, settingsFromForms());
+      statusLine('#storage-status', true, '공유폴더 읽기·쓰기를 시험하고 있습니다.');
+      I.testStorage(db.settings).then(function (r) {
+        statusLine('#storage-status', r.ok, r.ok ? '공유폴더에 시험 파일을 쓰고 지웠습니다: ' + r.path
+          : '공유폴더를 사용할 수 없습니다: ' + r.error);
+      });
+    });
+    $('#settings-save').addEventListener('click', function () {
+      Object.assign(db.settings, settingsFromForms());
+      var apiKey = $('#ai-settings [name=externalApiKey]').value;
+      persist();
+      I.saveSettings(db.settings, apiKey).then(function (r) {
+        if (r.ok) {
+          $('#ai-settings [name=externalApiKey]').value = '';
+          statusLine('#settings-status', true, '설정을 사내 서버에 저장했습니다. API 키는 서버에만 보관됩니다.');
+        } else {
+          statusLine('#settings-status', false, '화면 설정은 이 브라우저에 저장했지만 사내 서버에는 연결하지 못했습니다. API 키는 저장하지 않았습니다.');
+        }
+      });
+    });
+  }
+
   /* ═══════════════════════════════════════ 내보내기·가져오기 */
 
   function download(blob, name) {
@@ -1239,5 +1556,6 @@
     if ($('#cost-table')) initCost();
     if ($('#drop')) initEnergy();
     if ($('#campus')) initMap();
+    if ($('#storage-settings')) initSettings();
   });
 })();

@@ -1,0 +1,12 @@
+{
+  "sharedPath": "\\\\fileserver\\facility\\FacilityAI",
+  "aiMode": "rules",
+  "localAiUrl": "http://127.0.0.1:11434",
+  "localAiModel": "",
+  "externalAiUrl": "",
+  "externalAiModel": "",
+  "externalApiKey": "",
+  "allowExternalFallback": false,
+  "lawApiUrl": "https://www.law.go.kr/DRF",
+  "lawApiOc": ""
+}

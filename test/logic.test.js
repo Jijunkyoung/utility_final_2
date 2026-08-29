@@ -17,6 +17,8 @@ const S = require('../js/schedule.js');
 const L = require('../js/law.js');
 const E = require('../js/energy.js');
 const St = require('../js/store.js');
+const A = require('../js/analysis.js');
+const I = require('../js/integration.js');
 
 let pass = 0;
 const fails = [];
@@ -182,15 +184,18 @@ const recheck = L.needsReview([
 ]);
 ok(/재검토/.test(recheck[0].reasons.join()), '재검토 필요 표시를 확인 필요 목록에 반영한다');
 
-/* ── ⑤ 저장 자료 v1 → v2 하위호환 ───────────────────────────────── */
+/* ── ⑤ 저장 자료 v1 → v3 하위호환 ───────────────────────────────── */
 
 const migrated = St.normalize({
   equipments: [{ id: 'eq1', name: '온수보일러', building: '본관' }],
   history: [], consumables: [], energy: []
 });
-eq(migrated.schemaVersion, 2, '이전 자료를 현재 스키마 버전으로 올린다');
+eq(migrated.schemaVersion, 3, '이전 자료를 현재 스키마 버전으로 올린다');
 ok(Array.isArray(migrated.manuals) && Array.isArray(migrated.lawReviews),
    '  매뉴얼·법령 검토 컬렉션을 빈 배열로 보완한다');
+ok(Array.isArray(migrated.lawDocuments) && Array.isArray(migrated.analysisResults),
+   '  내부 법령 원문·분석 결과 컬렉션을 빈 배열로 보완한다');
+eq(migrated.settings.aiMode, 'rules', '  AI를 설정하기 전에는 규칙 기반으로 안전하게 시작한다');
 eq(migrated.buildings[0].name, '본관', '  설비의 건물명으로 좌표 레코드를 만든다');
 ok(['x', 'y', 'w', 'h'].every(k => Number.isFinite(migrated.buildings[0][k])),
    '  조감도 좌표가 설비와 분리되어 있다');
@@ -208,10 +213,35 @@ const removed = St.removeEquipment({
 }, 'eq1');
 eq(removed.equipments.map(x => x.id), ['eq2'], '설비를 삭제한다');
 eq(removed.history.map(x => x.equipmentId), ['eq2'], '  다른 설비 이력은 남긴다');
-ok(['consumables', 'manuals', 'lawReviews'].every(k => removed[k].length === 0),
-   '  연결된 소모품·매뉴얼·법령 기록도 함께 삭제한다');
+ok(['consumables', 'manuals', 'lawReviews', 'lawDocuments', 'analysisResults'].every(k => removed[k].length === 0),
+   '  연결된 소모품·매뉴얼·법령 원문·분석 기록도 함께 삭제한다');
 
-/* ── ⑥ 에너지 사용량 읽기 ────────────────────────────────────────── */
+/* ── ⑥ 매뉴얼·법령 분석 ─────────────────────────────────────────── */
+
+const manualAnalysis = A.manual(`
+흡입 필터는 6개월마다 교체한다.
+윤활유는 12개월마다 교환하고 교환 이력을 기록한다.
+안전밸브 작동상태는 12개월마다 검사한다.
+`);
+eq(manualAnalysis.consumables.length, 2, '매뉴얼에서 소모품 교체 항목을 찾는다');
+eq(manualAnalysis.consumables.map(x => x.cycleMonths), [6, 12], '  개월·년 단위 주기를 구조화한다');
+ok(manualAnalysis.inspections.some(x => x.name === '안전밸브'), '  정기 검사 항목을 별도로 찾는다');
+ok(manualAnalysis.consumables.every(x => x.evidence), '  모든 제안에 원문 근거를 남긴다');
+eq(A.cycleOf('2,000시간마다 교체').cycleMonths, null,
+   '운전시간 주기를 임의로 개월로 바꾸지 않는다');
+
+const lawAnalysis = A.law({ legalMgr: '', pressure: '0.98 MPa' }, [{
+  law: '산업안전보건법', effectiveDate: '2026-01-01',
+  content: '사업주는 안전검사를 실시하여야 한다. 관리자를 선임하여야 한다.'
+}]);
+ok(lawAnalysis.rows.length >= 2, '저장한 법령 원문에서 비교할 요구사항을 찾는다');
+ok(lawAnalysis.rows.some(x => x.status === '정보 부족'), '설비 값이 없으면 충족으로 단정하지 않는다');
+ok(lawAnalysis.rows.every(x => x.status !== '충족'), '규칙 분석만으로 법적 충족 판정을 만들지 않는다');
+ok(/JSON/.test(A.prompt('manual', {}, '필터 교체')), 'AI 요청도 JSON 근거 구조를 요구한다');
+ok(typeof I.health === 'function' && typeof I.analyze === 'function',
+   '사내 서버의 공유폴더·로컬 AI·외부 API 연결 함수를 제공한다');
+
+/* ── ⑦ 에너지 사용량 읽기 ────────────────────────────────────────── */
 
 let g = E.parseUsage(`
 2026년 1월 전력 사용량 125,400 kWh 요금 18,310,000 원
