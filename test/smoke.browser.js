@@ -1,4 +1,4 @@
-/* 브라우저에 실제로 띄워 여덟 장이 그려지는지 본다.
+/* 브라우저에 실제로 띄워 아홉 장이 그려지는지 본다.
  *
  *   node test/smoke.browser.js
  *
@@ -7,7 +7,7 @@
  * 파일을 읽어서는 안 잡힌다 — 실제로 띄워 봐야 잡힌다.
  *
  * 「예시 자료 넣기」 한 번이 설비·소모품·이력·에너지를 모두 넣으므로,
- * 그것을 누르고 여덟 장을 차례로 도는 것이 가장 넓게 훑는 길이다.
+ * 그것을 누르고 아홉 장을 차례로 도는 것이 가장 넓게 훑는 길이다.
  * 자료가 localStorage 에 있으므로 **같은 컨텍스트를 계속 쓴다.**
  *
  * playwright 가 없으면 조용히 건너뛴다. 이것 하나 때문에 다른 테스트가
@@ -108,10 +108,10 @@ function serve(port) {
       return [ (db.equipments || []).length, (db.consumables || []).length,
                (db.history || []).length, (db.energy || []).length,
                (db.manuals || []).length, (db.lawReviews || []).length,
-               (db.buildings || []).length ];
+               (db.buildings || []).length, (db.managers || []).length ];
     });
     ok(counts.every(function (n) { return n > 0; }),
-       '설비·소모품·이력·에너지·매뉴얼·법령검토·건물좌표가 모두 들어갔다 (' + counts.join(' / ') + ')');
+       '설비·소모품·이력·에너지·매뉴얼·법령검토·건물좌표·담당자가 모두 들어갔다 (' + counts.join(' / ') + ')');
     ok(!(await page.isVisible('#empty-hint')), '「자료 없음」 안내가 사라진다');
 
     group('3. 설비 — 법령은 알려 주되 주기는 알려 주지 않는다');
@@ -122,6 +122,9 @@ function serve(port) {
     ok(await page.isVisible('#eq-create-open'), '설비 등록은 목록 위 버튼으로 보인다');
     await page.click('#eq-create-open');
     ok(await page.isVisible('#eq-create'), '설비 등록 버튼을 누르면 입력 창이 열린다');
+    ok(await page.locator('#eq-form [name="legalManagerId"] option').count() > 1
+       && await page.locator('#eq-form [name="maintenanceManagerId"] option').count() > 1,
+       '법정선임·유지관리 담당자를 통합 대장에서 고른다');
     var registrationLabels = await page.locator('#eq-form .register-row>label').allTextContents();
     ok(registrationLabels.join('|') === [
       '설비번호','설비명','종류','모델명','제조사','용량','유량','압력','소모전력','냉난방능력',
@@ -192,6 +195,17 @@ function serve(port) {
     await page.locator('#detail-law-candidates [data-law-candidate]').first().click();
     ok(await page.locator('#detail-law-documents .law-document').count() > 0,
        '법령 후보를 눌러 내부 DB 목록에 저장한다');
+    await page.click('#detail-law-document-new');
+    ok(await page.isEditable('#detail-law-document-form [name="law"]'),
+       '자동 후보에 없어도 법령명을 직접 입력할 수 있다');
+    await page.fill('#detail-law-document-form [name="law"]', '산업안전보건기준에 관한 규칙');
+    await page.fill('#detail-law-document-form [name="about"]', '설비 안전조치 직접 등록 시험');
+    await page.fill('#detail-law-document-form [name="sourceUrl"]', 'https://www.law.go.kr/');
+    await page.fill('#detail-law-document-form [name="content"]', '사업주는 설비에 필요한 안전조치를 하여야 한다.');
+    await page.click('#detail-law-document-save');
+    ok((await page.textContent('#detail-law-documents')).indexOf('산업안전보건기준에 관한 규칙') >= 0
+       && await page.locator('#detail-law-documents a[href^="https://www.law.go.kr/"]').count() > 0,
+       '직접 입력한 연관법령과 출처를 해당 설비 내부 DB에 저장한다');
     await page.fill('#detail-law-document-form [name="content"]',
       '사업주는 관리자를 선임하여야 한다. 설비는 정기검사를 실시하여야 한다.');
     await page.click('#detail-law-document-save');
@@ -216,7 +230,18 @@ function serve(port) {
        '새로고침 뒤에도 상세 자료가 유지된다');
     await page.click('#detail-close');
 
-    group('4. 알림 — 시기를 계산하고 문안을 만들어 준다');
+    group('4. 담당자 — 통합 대장과 설비 연결 건수를 관리한다');
+    await go('managers.html');
+    ok(await page.locator('#manager-table tbody tr').count() > 0, '담당자 통합 대장에 줄이 있다');
+    ok((await page.textContent('#manager-stats')).indexOf('연결된 설비') >= 0,
+       '담당자와 연결된 설비 건수를 요약한다');
+    await page.fill('#manager-form [name="name"]', '연기 담당자');
+    await page.fill('#manager-form [name="email"]', 'smoke@example.com');
+    await page.click('#manager-save');
+    ok((await page.textContent('#manager-table')).indexOf('연기 담당자') >= 0,
+       '새 담당자를 대장에 저장한다');
+
+    group('5. 알림 — 시기를 계산하고 문안을 만들어 준다');
     await go('alerts.html');
     ok((await page.textContent('#alert-stats')).trim().length > 0, '알림 요약이 나온다');
     var alerts = (await page.textContent('#insp')) + (await page.textContent('#cons'));
@@ -229,13 +254,13 @@ function serve(port) {
        mail.slice(0, 80));
     ok(await page.isVisible('#copy-mail'), '복사 단추가 있다 (직접 보내지는 않는다)');
 
-    group('5. 이력 — 금액을 모르면 「미상」');
+    group('6. 이력 — 금액을 모르면 「미상」');
     await go('history.html');
     ok(await page.locator('#h-table tbody tr').count() > 0, '이력 표에 줄이 있다');
     var hsum = (await page.textContent('#h-sum')).replace(/\s+/g, ' ');
     ok(hsum.length > 0, '설비별 누계가 나온다', hsum.slice(0, 100));
 
-    group('6. 비용 — 셀 수 없었던 것을 따로 남긴다');
+    group('7. 비용 — 셀 수 없었던 것을 따로 남긴다');
     await go('cost.html');
     await page.click('#calc');
     await page.waitForTimeout(300);
@@ -243,7 +268,7 @@ function serve(port) {
     var unknown = (await page.textContent('#cost-unknown')).replace(/\s+/g, ' ');
     ok(unknown.length > 0, '「셀 수 없었던 것」 자리가 채워진다', unknown.slice(0, 120));
 
-    group('7. 에너지 — 12개월이 표와 그래프로');
+    group('8. 에너지 — 12개월이 표와 그래프로');
     await go('energy.html');
     ok(await page.locator('#energy-table tbody tr').count() > 0, '에너지 표에 줄이 있다');
     var svg = await page.locator('#charts svg').count();
@@ -262,24 +287,27 @@ function serve(port) {
        && (await page.textContent('#read-note')).indexOf('적용했습니다') >= 0,
        '적용 버튼을 눌러 붙여넣은 사용량을 표와 그래프 데이터에 반영한다');
 
-    group('7-1. 설정 — 공유폴더와 두 가지 AI 연결을 고른다');
+    group('8-1. 설정 — 공유폴더·공용 DB와 두 가지 AI 연결을 고른다');
     await go('settings.html');
     ok(await page.isVisible('#storage-settings [name="sharedPath"]')
        && await page.isVisible('#storage-test'), '공유폴더 경로와 읽기·쓰기 시험 버튼이 있다');
+    ok(await page.isVisible('#storage-settings [name="serverToken"]')
+       && await page.isVisible('#sync-pull') && await page.isVisible('#sync-push') && await page.isVisible('#sync-backup'),
+       '서버 토큰과 공용 자료 불러오기·저장·백업 버튼이 있다');
     ok(await page.locator('#ai-settings [name="aiMode"] option').count() === 4,
        '규칙·로컬 AI·외부 API·자동 선택 모드를 제공한다');
     ok(await page.isVisible('#ai-settings [name="externalApiKey"]')
        && await page.isVisible('#ai-settings [name="localAiUrl"]'),
        '외부 API와 로컬 AI 설정을 모두 제공한다');
 
-    group('8. 조감도 — 건물을 눌러 그 건물 설비 보기');
+    group('9. 조감도 — 건물을 눌러 그 건물 설비 보기');
     await go('map.html');
     var bldgs = await page.locator('#campus .bldg, #campus [data-bldg], #campus g, #campus rect').count();
     ok(bldgs > 0, '건물이 그려진다 (' + bldgs + '개)');
     ok(await page.locator('#campus [data-building-id]').count() === bldgs,
        '건물 ID와 좌표 구조로 배치된다');
 
-    group('9. 좁은 화면에서 가로로 넘치지 않는다');
+    group('10. 좁은 화면에서 가로로 넘치지 않는다');
     await go('');
     await page.setViewportSize({ width: 380, height: 780 });
     await page.waitForTimeout(150);
@@ -288,7 +316,7 @@ function serve(port) {
     });
     ok(over <= 1, '가로 스크롤이 생기지 않는다 (넘침 ' + over + 'px)');
 
-    group('10. 콘솔에 오류가 없다');
+    group('11. 콘솔에 오류가 없다');
     ok(errors.length === 0, '자바스크립트 오류 없음', errors.slice(0, 3).join(' | '));
     /* 이 서버가 못 내준 파일이 있으면 앱이 아니라 테스트가 틀린 것이다 */
     ok(missed.length === 0, '테스트 서버가 필요한 파일을 다 내줬다', missed.join(', '));

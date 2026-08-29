@@ -8,5 +8,7 @@
   "externalApiKey": "",
   "allowExternalFallback": false,
   "lawApiUrl": "https://www.law.go.kr/DRF",
-  "lawApiOc": ""
+  "lawApiOc": "",
+  "allowedOrigins": [],
+  "apiToken": "회사에서 정한 충분히 긴 임의 문자열"
 }

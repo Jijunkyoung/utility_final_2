@@ -27,6 +27,8 @@ MENU = [
      "지금 챙겨야 할 것부터 봅니다. 기한이 임박한 검사·교체와 올해 남은 비용."),
     ("equipment.html", "설비",   "설비 등록·목록",
      "설비 사양과 담당자, 관련 법령을 한 건씩 등록합니다. 여기 적은 값이 나머지 화면의 근거가 됩니다."),
+    ("managers.html",  "담당자", "담당자 통합 대장",
+     "법정선임관리자와 유지관리자의 연락처, 재직 상태, 담당 설비를 한 곳에서 관리합니다."),
     ("alerts.html",    "알림",   "검사·교체 알림",
      "법정검사와 소모품 교체 시기를 계산해 임박한 순서로 보여 줍니다."),
     ("history.html",   "이력",   "이력 관리",
@@ -119,6 +121,8 @@ def build(fname, body, extra=""):
         for f, label, _, _ in MENU)
     canon = "" if fname == "index.html" else fname
     og = "og-index.png" if fname == "index.html" else "og-%s.png" % fname.replace(".html", "")
+    if not os.path.exists(os.path.join(HERE, og)):
+        og = "og-index.png"
     html = (HEAD.format(title=title, desc=desc, site=SITE, base=BASE,
                         canon=canon, og=og, links=links)
             + body.strip() + "\n"
@@ -203,9 +207,9 @@ PAGES["equipment.html"] = """
       <div class="register-row"><label for="eq-building">위치</label><input id="eq-building" name="building" placeholder="본관" list="bldg-list"><datalist id="bldg-list"></datalist></div>
       <div class="register-row"><label for="eq-place">세부위치</label><input id="eq-place" name="place" placeholder="지하 1층 기계실"></div>
       <div class="register-row"><label for="eq-installed">설치일</label><input id="eq-installed" name="installedAt" type="date"></div>
-      <div class="register-row"><label for="eq-legal-mgr">법정선임관리자</label><input id="eq-legal-mgr" name="legalMgr" placeholder="이름 / 연락처"></div>
-      <div class="register-row"><label for="eq-mgr">유지관리자</label><input id="eq-mgr" name="mgr" placeholder="이름 / 연락처"></div>
-      <div class="register-row"><label for="eq-mgr-email">유지관리자 메일</label><input id="eq-mgr-email" name="mgrEmail" type="email" placeholder="name@company.com"></div>
+      <div class="register-row"><label for="eq-legal-mgr">법정선임관리자</label><select id="eq-legal-mgr" name="legalManagerId"></select></div>
+      <div class="register-row"><label for="eq-mgr">유지관리자</label><select id="eq-mgr" name="maintenanceManagerId"></select></div>
+      <div class="register-row"><label for="eq-mgr-email">유지관리자 메일</label><input id="eq-mgr-email" name="mgrEmail" type="email" readonly placeholder="담당자 대장에서 자동 표시"></div>
       <div class="register-row"><label for="eq-last-inspect">법정검사</label><input id="eq-last-inspect" name="lastInspect" type="date"></div>
       <div class="register-row"><label for="eq-cycle">검사주기</label><div class="input-with-unit"><input id="eq-cycle" name="cycleMonths" type="number" min="1" step="1" placeholder="12"><span>개월</span></div></div>
       <div class="register-row"><label for="eq-cost">검사비용</label><div class="input-with-unit"><input id="eq-cost" name="inspectCost" type="number" min="0" step="1000" placeholder="0"><span>원</span></div></div>
@@ -281,16 +285,22 @@ PAGES["equipment.html"] = """
 	    <div id="detail-law-candidates"></div>
 	    <h3 class="detail-subtitle">내부 DB에 저장한 법령</h3>
 	    <div id="detail-law-documents"></div>
+	    <h3 class="detail-subtitle">연관법령 직접 추가·수정</h3>
+	    <p class="sub">자동 후보에 없는 법령도 이 설비의 연관법령으로 직접 등록할 수 있습니다. 법령명만 필수이며, 확인한 출처와 적용 조항을 함께 남기면 비교검토 근거가 됩니다.</p>
 	    <form id="detail-law-document-form" class="grid-form compact-form">
-	      <label>선택 법령 <input name="law" readonly placeholder="위 후보에서 저장할 법령을 선택하세요"></label>
+	      <label>법령명 <input name="law" required placeholder="예: 산업안전보건법"></label>
+	      <label>연관 내용 <input name="about" placeholder="이 설비와 관련된 이유·적용 범위"></label>
+	      <label style="grid-column:1/-1">출처 URL <input name="sourceUrl" type="url" placeholder="https://www.law.go.kr/..."></label>
 	      <label>시행일/기준일 <input name="effectiveDate" type="date"></label>
 	      <label style="grid-column:1/-1">법령 원문 또는 적용 조항 <textarea name="content" rows="7" placeholder="국가법령정보센터에서 확인한 적용 조항을 붙여넣거나 법령 파일을 선택하세요."></textarea></label>
 	      <label>법령 파일 <span class="btn file-button" id="law-file-label">파일 선택</span><input id="law-file" type="file" accept=".pdf,.txt,.hwp,.docx"></label>
 	    </form>
 	    <div class="btnrow">
-	      <button class="btn primary" id="detail-law-document-save" type="button">법령 원문 저장</button>
+	      <button class="btn primary" id="detail-law-document-save" type="button">연관법령 추가·저장</button>
+	      <button class="btn" id="detail-law-document-new" type="button">새 법령 입력</button>
 	      <button class="btn green" id="detail-law-review-run" type="button">저장 법령 비교 검토</button>
 	    </div>
+	    <div id="detail-law-document-status"></div>
 	    <div id="detail-law-comparison"></div>
 	    <h3 class="detail-subtitle">검토 기록 추가</h3>
 	    <form id="detail-law-form" class="grid-form compact-form">
@@ -476,6 +486,9 @@ PAGES["settings.html"] = """
     <form id="storage-settings" class="grid-form settings-form">
       <label>사내 서버 주소 <input name="serverUrl" placeholder="http://서버PC이름:8765"></label>
       <label>공유폴더 UNC 경로 <input name="sharedPath" placeholder="\\\\fileserver\\facility\\FacilityAI"></label>
+      <label>서버 접근 토큰 <input name="serverToken" type="password" autocomplete="off" placeholder="config.local.json의 apiToken"></label>
+      <label>작업자 이름 <input name="syncActor" placeholder="예: 지준경"></label>
+      <label>PC 이름 <input name="deviceName" placeholder="예: 유틸리티실-PC01"></label>
     </form>
     <div class="btnrow">
       <button class="btn primary" id="storage-save" type="button">이 경로로 설정</button>
@@ -483,6 +496,20 @@ PAGES["settings.html"] = """
       <button class="btn" id="storage-test" type="button">공유폴더 읽기·쓰기 시험</button>
     </div>
     <div id="storage-status"></div>
+  </section>
+
+  <section class="card">
+    <h2>공용 데이터 동기화</h2>
+    <p class="sub">공용 DB와 이 PC 자료가 다르면 자동으로 덮어쓰지 않습니다. 사용할 자료를 확인해 직접 선택하세요.</p>
+    <div class="sync-summary" id="sync-summary"></div>
+    <div class="btnrow">
+      <button class="btn primary" id="sync-pull" type="button">서버 자료 불러오기</button>
+      <button class="btn" id="sync-push" type="button">이 PC 자료를 서버에 저장</button>
+      <button class="btn" id="sync-backup" type="button">공용 DB 지금 백업</button>
+    </div>
+    <div id="sync-status"></div>
+    <h3 class="detail-subtitle">최근 변경 기록</h3>
+    <div class="tablewrap"><table id="sync-audit"><thead><tr><th>버전</th><th>작업자</th><th>PC</th><th>시각</th></tr></thead><tbody></tbody></table></div>
   </section>
 
   <section class="card">
@@ -510,6 +537,27 @@ PAGES["settings.html"] = """
     <div id="settings-status"></div>
   </section>
 </div>
+"""
+
+# ─────────────────────────────────────────────────────────── 담당자
+PAGES["managers.html"] = """
+<div class="card">
+  <h2>담당자 등록·수정</h2>
+  <p class="sub">연락처를 설비마다 반복 입력하지 않고 한 번 등록한 뒤 담당 설비와 연결합니다.</p>
+  <form id="manager-form" class="grid-form">
+    <input name="id" type="hidden">
+    <label>구분 <select name="role"><option value="legal">법정선임관리자</option><option value="maintenance">유지관리자</option><option value="both">법정선임·유지관리 겸임</option></select></label>
+    <label>이름 <input name="name" required></label>
+    <label>부서 <input name="department"></label>
+    <label>연락처 <input name="phone" type="tel"></label>
+    <label>메일 <input name="email" type="email"></label>
+    <label>상태 <select name="active"><option value="true">재직·담당 중</option><option value="false">휴직·퇴직·담당 해제</option></select></label>
+    <label style="grid-column:1/-1">메모 <input name="note"></label>
+  </form>
+  <div class="btnrow"><button class="btn primary" id="manager-save" type="button">담당자 저장</button><button class="btn" id="manager-clear" type="button">입력 지우기</button></div>
+</div>
+<div class="stats" id="manager-stats"></div>
+<div class="tablewrap"><table id="manager-table"><thead><tr><th>관리</th><th>구분</th><th>이름</th><th>부서</th><th>연락처</th><th>메일</th><th>담당 설비</th><th>상태</th></tr></thead><tbody></tbody></table></div>
 """
 
 
