@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>담당자 통합 대장 | Facility AI</title>
+<meta name="description" content="법정선임관리자와 유지관리자의 연락처, 재직 상태, 담당 설비를 한 곳에서 관리합니다.">
+<link rel="stylesheet" href="css/style.css">
+<!-- === HD:META:BEGIN (자동 생성 — scripts 로 다시 굽습니다) === -->
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="canonical" href="https://aebonlee.github.io/hd-project15/managers.html">
+<meta name="robots" content="index,follow">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Facility AI">
+<meta property="og:url" content="https://aebonlee.github.io/hd-project15/managers.html">
+<meta property="og:title" content="담당자 통합 대장 — Facility AI">
+<meta property="og:description" content="법정선임관리자와 유지관리자의 연락처, 재직 상태, 담당 설비를 한 곳에서 관리합니다.">
+<meta property="og:image" content="https://aebonlee.github.io/hd-project15/og-index.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale" content="ko_KR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="담당자 통합 대장 — Facility AI">
+<meta name="twitter:description" content="법정선임관리자와 유지관리자의 연락처, 재직 상태, 담당 설비를 한 곳에서 관리합니다.">
+<meta name="twitter:image" content="https://aebonlee.github.io/hd-project15/og-index.png">
+<!-- === HD:META:END === -->
+</head>
+<body>
+
+<nav class="topnav"><div class="topnav-inner">
+  <a class="topnav-brand" href="index.html">Facility AI<small>유틸리티 설비·에너지</small></a>
+  <ul class="topnav-links">
+    <li><a href="index.html">개요</a></li>
+    <li><a href="equipment.html">설비</a></li>
+    <li><a href="managers.html" class="active">담당자</a></li>
+    <li><a href="alerts.html">알림</a></li>
+    <li><a href="history.html">이력</a></li>
+    <li><a href="cost.html">비용</a></li>
+    <li><a href="energy.html">에너지</a></li>
+    <li><a href="map.html">조감도</a></li>
+    <li><a href="settings.html">설정</a></li>
+  </ul>
+</div></nav>
+
+<header class="hero"><div class="wrap">
+  <div class="eyebrow">HD 생성형 AI 업무자동화 전문가과정 · 기획 지준경</div>
+  <h1>담당자 통합 대장</h1>
+  <p>법정선임관리자와 유지관리자의 연락처, 재직 상태, 담당 설비를 한 곳에서 관리합니다.</p>
+</div></header>
+
+<main><div class="wrap">
+<div class="card">
+  <h2>담당자 등록·수정</h2>
+  <p class="sub">연락처를 설비마다 반복 입력하지 않고 한 번 등록한 뒤 담당 설비와 연결합니다.</p>
+  <form id="manager-form" class="grid-form">
+    <input name="id" type="hidden">
+    <label>구분 <select name="role"><option value="legal">법정선임관리자</option><option value="maintenance">유지관리자</option><option value="both">법정선임·유지관리 겸임</option></select></label>
+    <label>이름 <input name="name" required></label>
+    <label>부서 <input name="department"></label>
+    <label>연락처 <input name="phone" type="tel"></label>
+    <label>메일 <input name="email" type="email"></label>
+    <label>상태 <select name="active"><option value="true">재직·담당 중</option><option value="false">휴직·퇴직·담당 해제</option></select></label>
+    <label style="grid-column:1/-1">메모 <input name="note"></label>
+  </form>
+  <div class="btnrow"><button class="btn primary" id="manager-save" type="button">담당자 저장</button><button class="btn" id="manager-clear" type="button">입력 지우기</button></div>
+</div>
+<div class="stats" id="manager-stats"></div>
+<div class="tablewrap"><table id="manager-table"><thead><tr><th>관리</th><th>구분</th><th>이름</th><th>부서</th><th>연락처</th><th>메일</th><th>담당 설비</th><th>상태</th></tr></thead><tbody></tbody></table></div>
+</div></main>
+
+<footer><div class="wrap">
+  <p>Facility AI — 캠퍼스 유틸리티 설비·에너지 통합 관리.
+     사내 서버가 연결되면 파일은 설정한 공유폴더에, 연결 전 임시 자료는 이 브라우저에 저장됩니다.</p>
+  <p class="sub">문의 dreamitbiz@naver.com · 010-2634-2426 · 카카오톡 aebon</p>
+</div></footer>
+
+<script src="lib/xlsx.full.min.js"></script>
+<script src="js/store.js"></script>
+<script src="js/schedule.js"></script>
+<script src="js/law.js"></script>
+<script src="js/energy.js"></script>
+<script src="js/analysis.js"></script>
+<script src="js/integration.js"></script>
+<script src="js/app.js"></script>
+
+</body>
+</html>

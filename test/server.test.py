@@ -1,8 +1,12 @@
 import json
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 import sys
+from http.server import ThreadingHTTPServer
+from urllib.error import HTTPError
+from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "server"))
@@ -24,6 +28,7 @@ class FacilityServerTest(unittest.TestCase):
         data = server.load_config()
         self.assertEqual(data["externalApiKey"], "secret-key")
         self.assertEqual(data["sharedPath"], str(share))
+        self.assertEqual(server.DEFAULTS["apiToken"], "")
 
     def test_database_is_created_in_shared_root(self):
         share = self.root / "share"
@@ -31,8 +36,86 @@ class FacilityServerTest(unittest.TestCase):
         conn = server.database()
         tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         conn.close()
-        self.assertTrue({"files", "law_documents", "analyses"}.issubset(tables))
+        self.assertTrue({"files", "law_documents", "analyses", "app_state", "state_versions", "audit_log"}.issubset(tables))
         self.assertTrue((share / "facility-ai.db").exists())
+
+    def test_shared_state_has_revision_conflict_and_force_save(self):
+        server.save_config({"sharedPath": str(self.root / "share")})
+        first_ok, first = server.save_shared_state({
+            "baseRevision": 0, "actor": "시설팀", "deviceName": "PC-01",
+            "data": {"equipments": [{"id": "eq1"}], "settings": {"apiToken": "never-store"}},
+        })
+        self.assertTrue(first_ok)
+        self.assertEqual(first["revision"], 1)
+        self.assertEqual(first["data"]["equipments"][0]["id"], "eq1")
+        self.assertNotIn("settings", first["data"])
+
+        stale_ok, stale = server.save_shared_state({
+            "baseRevision": 0, "actor": "다른PC", "deviceName": "PC-02",
+            "data": {"equipments": [{"id": "stale"}]},
+        })
+        self.assertFalse(stale_ok)
+        self.assertEqual(stale["revision"], 1)
+
+        force_ok, forced = server.save_shared_state({
+            "baseRevision": 0, "force": True, "actor": "관리자", "deviceName": "PC-03",
+            "data": {"equipments": [{"id": "chosen"}]},
+        })
+        self.assertTrue(force_ok)
+        self.assertEqual(forced["revision"], 2)
+        with server.database() as conn:
+            audit = conn.execute("SELECT action,actor FROM audit_log ORDER BY id DESC LIMIT 1").fetchone()
+        self.assertEqual((audit["action"], audit["actor"]), ("force-save", "관리자"))
+
+    def test_backup_copies_database_to_shared_folder(self):
+        share = self.root / "share"
+        server.save_config({"sharedPath": str(share)})
+        server.save_shared_state({"baseRevision": 0, "data": {"equipments": []}})
+        backup = server.create_backup()
+        self.assertTrue(backup.is_file())
+        self.assertEqual(backup.parent, share / "backups")
+
+    def test_api_token_and_origin_are_enforced(self):
+        server.save_config({"sharedPath": str(self.root / "share"), "apiToken": "test-token"})
+        httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
+        thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+        thread.start()
+        base = f"http://127.0.0.1:{httpd.server_address[1]}"
+        try:
+            with self.assertRaises(HTTPError) as missing:
+                urlopen(base + "/api/health", timeout=2)
+            self.assertEqual(missing.exception.code, 401)
+
+            good = Request(base + "/api/health", headers={"Authorization": "Bearer test-token"})
+            with urlopen(good, timeout=2) as response:
+                self.assertTrue(json.load(response)["ok"])
+
+            bad_origin = Request(base + "/api/health", headers={
+                "Authorization": "Bearer test-token", "Origin": "https://unapproved.example",
+            })
+            with self.assertRaises(HTTPError) as denied:
+                urlopen(bad_origin, timeout=2)
+            self.assertEqual(denied.exception.code, 403)
+        finally:
+            httpd.shutdown()
+            httpd.server_close()
+            thread.join(timeout=2)
+
+    def test_same_origin_page_has_server_marker_and_security_headers(self):
+        server.save_config({"sharedPath": str(self.root / "share")})
+        httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
+        thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with urlopen(f"http://127.0.0.1:{httpd.server_address[1]}/", timeout=2) as response:
+                html = response.read().decode("utf-8")
+                self.assertIn('meta name="facility-server" content="same-origin"', html)
+                self.assertEqual(response.headers["X-Frame-Options"], "SAMEORIGIN")
+                self.assertEqual(response.headers["X-Content-Type-Options"], "nosniff")
+        finally:
+            httpd.shutdown()
+            httpd.server_close()
+            thread.join(timeout=2)
 
     def test_filename_removes_path_traversal(self):
         value = server.safe_segment("../../비밀/매뉴얼?.pdf")

@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import json
+import mimetypes
 import os
 import re
 import sqlite3
@@ -20,6 +21,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 HERE = Path(__file__).resolve().parent
+PROJECT_ROOT = HERE.parent
 CONFIG_PATH = Path(os.environ.get("FACILITY_AI_CONFIG", HERE / "config.local.json"))
 DEFAULTS = {
     "sharedPath": "",
@@ -32,7 +34,14 @@ DEFAULTS = {
     "allowExternalFallback": False,
     "lawApiUrl": "https://www.law.go.kr/DRF",
     "lawApiOc": "",
+    "allowedOrigins": [],
+    "apiToken": "",
 }
+
+SHARED_KEYS = (
+    "equipments", "history", "consumables", "manuals", "lawReviews",
+    "lawDocuments", "analysisResults", "energy", "buildings", "managers",
+)
 
 
 def now() -> str:
@@ -95,8 +104,84 @@ def database(config: dict | None = None) -> sqlite3.Connection:
         id INTEGER PRIMARY KEY AUTOINCREMENT, equipment_id TEXT, kind TEXT NOT NULL,
         provider TEXT NOT NULL, result TEXT NOT NULL, created_at TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS app_state (
+        id INTEGER PRIMARY KEY CHECK(id=1), revision INTEGER NOT NULL,
+        payload TEXT NOT NULL, updated_at TEXT NOT NULL, updated_by TEXT,
+        device_name TEXT
+      );
+      CREATE TABLE IF NOT EXISTS state_versions (
+        revision INTEGER PRIMARY KEY, payload TEXT NOT NULL, created_at TEXT NOT NULL,
+        updated_by TEXT, device_name TEXT
+      );
+      CREATE TABLE IF NOT EXISTS audit_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, revision INTEGER NOT NULL,
+        action TEXT NOT NULL, actor TEXT, device_name TEXT, summary TEXT,
+        created_at TEXT NOT NULL
+      );
     """)
     return conn
+
+
+def shared_state(value: dict | None) -> dict:
+    source = value if isinstance(value, dict) else {}
+    return {key: source.get(key) if isinstance(source.get(key), list) else [] for key in SHARED_KEYS}
+
+
+def state_snapshot(conn: sqlite3.Connection) -> dict:
+    row = conn.execute("SELECT revision,payload,updated_at,updated_by,device_name FROM app_state WHERE id=1").fetchone()
+    if not row:
+        return {"revision": 0, "data": None, "updatedAt": None, "updatedBy": "", "deviceName": ""}
+    return {"revision": row["revision"], "data": shared_state(json.loads(row["payload"])),
+            "updatedAt": row["updated_at"], "updatedBy": row["updated_by"] or "",
+            "deviceName": row["device_name"] or ""}
+
+
+def change_summary(before: dict | None, after: dict) -> dict:
+    old = shared_state(before)
+    return {key: {"before": len(old[key]), "after": len(after[key])}
+            for key in SHARED_KEYS if len(old[key]) != len(after[key])}
+
+
+def save_shared_state(payload: dict) -> tuple[bool, dict]:
+    data = shared_state(payload.get("data"))
+    base_revision = int(payload.get("baseRevision") or 0)
+    actor = safe_segment(payload.get("actor"), "미지정 사용자")
+    device = safe_segment(payload.get("deviceName"), "미지정 PC")
+    force = bool(payload.get("force"))
+    with database() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        current = state_snapshot(conn)
+        if current["revision"] != base_revision and not force:
+            conn.rollback()
+            return False, current
+        revision = current["revision"] + 1
+        created = now()
+        encoded = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+        conn.execute("""INSERT INTO app_state(id,revision,payload,updated_at,updated_by,device_name)
+          VALUES(1,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,
+          payload=excluded.payload,updated_at=excluded.updated_at,updated_by=excluded.updated_by,
+          device_name=excluded.device_name""", (revision, encoded, created, actor, device))
+        conn.execute("INSERT INTO state_versions(revision,payload,created_at,updated_by,device_name) VALUES(?,?,?,?,?)",
+                     (revision, encoded, created, actor, device))
+        summary = change_summary(current.get("data"), data)
+        conn.execute("INSERT INTO audit_log(revision,action,actor,device_name,summary,created_at) VALUES(?,?,?,?,?,?)",
+                     (revision, "force-save" if force else "save", actor, device,
+                      json.dumps(summary, ensure_ascii=False), created))
+        conn.execute("DELETE FROM state_versions WHERE revision NOT IN (SELECT revision FROM state_versions ORDER BY revision DESC LIMIT 200)")
+        conn.commit()
+    return True, {"revision": revision, "data": data, "updatedAt": created,
+                  "updatedBy": actor, "deviceName": device}
+
+
+def create_backup() -> Path:
+    root = shared_root(); backup_dir = root / "backups"; backup_dir.mkdir(parents=True, exist_ok=True)
+    target = backup_dir / ("facility-ai-" + datetime.now().strftime("%Y%m%d-%H%M%S-%f") + ".db")
+    source = database(); destination = sqlite3.connect(target)
+    try:
+        source.backup(destination)
+    finally:
+        destination.close(); source.close()
+    return target
 
 
 def json_request(url: str, payload: dict, headers: dict | None = None, timeout: int = 90) -> dict:
@@ -217,11 +302,41 @@ def analyze(config: dict, payload: dict) -> tuple[dict, str]:
 class Handler(BaseHTTPRequestHandler):
     server_version = "FacilityAI/1.0"
 
+    def origin_allowed(self) -> bool:
+        origin = str(self.headers.get("Origin") or "").rstrip("/")
+        if not origin:
+            return True
+        host = str(self.headers.get("Host") or "")
+        own = {"http://" + host, "https://" + host}
+        allowed = {str(x).rstrip("/") for x in (load_config().get("allowedOrigins") or [])}
+        return origin in own or origin in allowed
+
+    def authorized(self) -> bool:
+        token = str(load_config().get("apiToken") or "")
+        if not token:
+            return True
+        return self.headers.get("Authorization") == "Bearer " + token
+
+    def api_guard(self) -> bool:
+        if not self.origin_allowed():
+            self.send_json(403, {"error": "허용되지 않은 화면 출처입니다."})
+            return False
+        if self.path.startswith("/api/") and not self.authorized():
+            self.send_json(401, {"error": "사내 서버 접근 토큰을 확인하세요."})
+            return False
+        return True
+
     def end_headers(self):
-        self.send_header("Access-Control-Allow-Origin", "*")
+        origin = str(self.headers.get("Origin") or "")
+        if origin and self.origin_allowed():
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "SAMEORIGIN")
+        self.send_header("Referrer-Policy", "same-origin")
         super().end_headers()
 
     def log_message(self, fmt, *args):
@@ -245,11 +360,38 @@ class Handler(BaseHTTPRequestHandler):
         return json.loads(self.read_body().decode("utf-8") or "{}")
 
     def do_OPTIONS(self):
+        if not self.origin_allowed():
+            self.send_json(403, {"error": "허용되지 않은 화면 출처입니다."})
+            return
         self.send_response(204)
         self.end_headers()
 
+    def serve_static(self, path: str) -> bool:
+        rel = "index.html" if path in ("", "/") else path.lstrip("/")
+        if rel.startswith((".", "server/", "test/")) or ".." in Path(rel).parts:
+            return False
+        target = (PROJECT_ROOT / rel).resolve()
+        try:
+            target.relative_to(PROJECT_ROOT.resolve())
+        except ValueError:
+            return False
+        if not target.is_file():
+            return False
+        content = target.read_bytes()
+        if target.suffix.lower() == ".html":
+            marker = b'<meta name="facility-server" content="same-origin">'
+            content = content.replace(b"<head>", b"<head>\n" + marker, 1)
+        mime = mimetypes.guess_type(str(target))[0] or "application/octet-stream"
+        self.send_response(200)
+        self.send_header("Content-Type", mime + ("; charset=utf-8" if mime.startswith("text/") else ""))
+        self.send_header("Content-Length", str(len(content)))
+        self.end_headers(); self.wfile.write(content)
+        return True
+
     def do_GET(self):
         parsed = urlparse(self.path)
+        if parsed.path.startswith("/api/") and not self.api_guard():
+            return
         if parsed.path == "/api/health":
             cfg = load_config()
             self.send_json(200, {"ok": True, "service": "Facility AI 사내 서버",
@@ -259,16 +401,33 @@ class Handler(BaseHTTPRequestHandler):
             cfg = load_config(); cfg.pop("externalApiKey", None)
             self.send_json(200, {"ok": True, "settings": cfg, "hasExternalApiKey": bool(load_config().get("externalApiKey"))})
             return
+        if parsed.path == "/api/state":
+            with database() as conn:
+                state = state_snapshot(conn)
+            self.send_json(200, {"ok": True, **state})
+            return
+        if parsed.path == "/api/audit":
+            limit = min(max(int(parse_qs(parsed.query).get("limit", ["30"])[0]), 1), 200)
+            with database() as conn:
+                rows = [dict(r) for r in conn.execute(
+                    "SELECT revision,action,actor,device_name,summary,created_at FROM audit_log ORDER BY id DESC LIMIT ?", (limit,))]
+            for row in rows:
+                row["summary"] = json.loads(row["summary"] or "{}")
+            self.send_json(200, {"ok": True, "items": rows})
+            return
         if parsed.path == "/api/laws":
             equipment_id = parse_qs(parsed.query).get("equipmentId", [""])[0]
             with database() as conn:
                 rows = [dict(r) for r in conn.execute("SELECT payload FROM law_documents WHERE equipment_id=?", (equipment_id,))]
             self.send_json(200, {"ok": True, "documents": [json.loads(r["payload"]) for r in rows]})
             return
-        self.send_json(404, {"error": "지원하지 않는 주소입니다."})
+        if not self.serve_static(parsed.path):
+            self.send_json(404, {"error": "지원하지 않는 주소입니다."})
 
     def do_POST(self):
         parsed = urlparse(self.path)
+        if not self.api_guard():
+            return
         try:
             if parsed.path == "/api/settings":
                 payload = self.read_json(); save_config(payload)
@@ -281,6 +440,17 @@ class Handler(BaseHTTPRequestHandler):
                 fd, name = tempfile.mkstemp(prefix="facility-write-test-", suffix=".tmp", dir=path)
                 os.write(fd, b"Facility AI write test"); os.close(fd); os.unlink(name)
                 self.send_json(200, {"ok": True, "path": str(path)})
+                return
+            if parsed.path == "/api/state":
+                saved, state = save_shared_state(self.read_json())
+                if not saved:
+                    self.send_json(409, {"error": "다른 PC에서 먼저 수정했습니다.", "conflict": True, **state})
+                else:
+                    self.send_json(200, {"ok": True, **state})
+                return
+            if parsed.path == "/api/backup":
+                target = create_backup()
+                self.send_json(200, {"ok": True, "path": str(target)})
                 return
             if parsed.path == "/api/files":
                 q = parse_qs(parsed.query)
@@ -347,10 +517,14 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
-    host = os.environ.get("FACILITY_AI_HOST", "0.0.0.0")
+    # 기본은 이 PC에서만 접속한다. 여러 PC 공개는 IT 승인 후 start_server_lan.bat로 연다.
+    host = os.environ.get("FACILITY_AI_HOST", "127.0.0.1")
     port = int(os.environ.get("FACILITY_AI_PORT", "8765"))
+    if host not in ("127.0.0.1", "localhost", "::1") and not str(load_config().get("apiToken") or "").strip():
+        raise SystemExit("LAN 공개를 중단했습니다: config.local.json에 충분히 긴 apiToken을 먼저 설정하세요.")
     database().close()
     print(f"Facility AI 사내 서버: http://{host}:{port}")
+    print("화면과 API를 같은 주소에서 제공합니다.")
     print(f"설정 파일: {CONFIG_PATH}")
     ThreadingHTTPServer((host, port), Handler).serve_forever()
 
