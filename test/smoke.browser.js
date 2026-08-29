@@ -195,6 +195,17 @@ function serve(port) {
     await page.locator('#detail-law-candidates [data-law-candidate]').first().click();
     ok(await page.locator('#detail-law-documents .law-document').count() > 0,
        '법령 후보를 눌러 내부 DB 목록에 저장한다');
+    await page.click('#detail-law-document-new');
+    ok(await page.isEditable('#detail-law-document-form [name="law"]'),
+       '자동 후보에 없어도 법령명을 직접 입력할 수 있다');
+    await page.fill('#detail-law-document-form [name="law"]', '산업안전보건기준에 관한 규칙');
+    await page.fill('#detail-law-document-form [name="about"]', '설비 안전조치 직접 등록 시험');
+    await page.fill('#detail-law-document-form [name="sourceUrl"]', 'https://www.law.go.kr/');
+    await page.fill('#detail-law-document-form [name="content"]', '사업주는 설비에 필요한 안전조치를 하여야 한다.');
+    await page.click('#detail-law-document-save');
+    ok((await page.textContent('#detail-law-documents')).indexOf('산업안전보건기준에 관한 규칙') >= 0
+       && await page.locator('#detail-law-documents a[href^="https://www.law.go.kr/"]').count() > 0,
+       '직접 입력한 연관법령과 출처를 해당 설비 내부 DB에 저장한다');
     await page.fill('#detail-law-document-form [name="content"]',
       '사업주는 관리자를 선임하여야 한다. 설비는 정기검사를 실시하여야 한다.');
     await page.click('#detail-law-document-save');

@@ -285,16 +285,22 @@ PAGES["equipment.html"] = """
 	    <div id="detail-law-candidates"></div>
 	    <h3 class="detail-subtitle">내부 DB에 저장한 법령</h3>
 	    <div id="detail-law-documents"></div>
+	    <h3 class="detail-subtitle">연관법령 직접 추가·수정</h3>
+	    <p class="sub">자동 후보에 없는 법령도 이 설비의 연관법령으로 직접 등록할 수 있습니다. 법령명만 필수이며, 확인한 출처와 적용 조항을 함께 남기면 비교검토 근거가 됩니다.</p>
 	    <form id="detail-law-document-form" class="grid-form compact-form">
-	      <label>선택 법령 <input name="law" readonly placeholder="위 후보에서 저장할 법령을 선택하세요"></label>
+	      <label>법령명 <input name="law" required placeholder="예: 산업안전보건법"></label>
+	      <label>연관 내용 <input name="about" placeholder="이 설비와 관련된 이유·적용 범위"></label>
+	      <label style="grid-column:1/-1">출처 URL <input name="sourceUrl" type="url" placeholder="https://www.law.go.kr/..."></label>
 	      <label>시행일/기준일 <input name="effectiveDate" type="date"></label>
 	      <label style="grid-column:1/-1">법령 원문 또는 적용 조항 <textarea name="content" rows="7" placeholder="국가법령정보센터에서 확인한 적용 조항을 붙여넣거나 법령 파일을 선택하세요."></textarea></label>
 	      <label>법령 파일 <span class="btn file-button" id="law-file-label">파일 선택</span><input id="law-file" type="file" accept=".pdf,.txt,.hwp,.docx"></label>
 	    </form>
 	    <div class="btnrow">
-	      <button class="btn primary" id="detail-law-document-save" type="button">법령 원문 저장</button>
+	      <button class="btn primary" id="detail-law-document-save" type="button">연관법령 추가·저장</button>
+	      <button class="btn" id="detail-law-document-new" type="button">새 법령 입력</button>
 	      <button class="btn green" id="detail-law-review-run" type="button">저장 법령 비교 검토</button>
 	    </div>
+	    <div id="detail-law-document-status"></div>
 	    <div id="detail-law-comparison"></div>
 	    <h3 class="detail-subtitle">검토 기록 추가</h3>
 	    <form id="detail-law-form" class="grid-form compact-form">
