@@ -207,7 +207,7 @@ function serve(port) {
        && await page.locator('#detail-law-documents a[href^="https://www.law.go.kr/"]').count() > 0,
        '직접 입력한 연관법령과 출처를 해당 설비 내부 DB에 저장한다');
     await page.fill('#detail-law-document-form [name="content"]',
-      '사업주는 관리자를 선임하여야 한다. 설비는 정기검사를 실시하여야 한다.');
+      '제12조 제3항에서는 용량 1.0 t/h 이상인 경우 법정선임관리자를 선임하여야 한다. 설비는 정기검사를 실시하여야 한다.');
     await page.click('#detail-law-document-save');
     await page.click('#detail-law-review-run');
     await page.waitForSelector('#detail-law-comparison .comparison-table tbody tr', { timeout: 5000 });
@@ -216,11 +216,29 @@ function serve(port) {
     ok((await page.textContent('#detail-law-comparison')).indexOf('정보 부족') >= 0
        || (await page.textContent('#detail-law-comparison')).indexOf('확인 필요') >= 0,
        '자동 검토가 부족한 정보나 담당자 확인 필요를 분명히 표시한다');
-    await page.fill('#detail-law-form [name="reviewer"]', '연기 테스트');
-    await page.fill('#detail-law-form [name="note"]', '사내 법령 자료 확인');
+    ok((await page.textContent('#detail-law-comparison')).indexOf('제12조 제3항') >= 0
+       && (await page.textContent('#detail-law-comparison')).indexOf('1.0 t/h 이상') >= 0,
+       '법령 요구사항에 원문 조문과 정량 기준을 자세히 표시한다');
+    await page.locator('#detail-law-comparison tr', { hasText: '산업안전보건기준에 관한 규칙' })
+      .locator('[data-law-review-row]').first().click();
+    ok(await page.inputValue('#detail-law-form [name="law"]') === '산업안전보건기준에 관한 규칙'
+       && (await page.inputValue('#detail-law-form [name="requirement"]')).indexOf('제12조 제3항') >= 0,
+       '비교표 버튼을 누르면 법령명과 요구사항이 검토 기록에 자동 입력된다');
+    ok(!(await page.isEditable('#detail-law-form [name="law"]'))
+       && await page.isEditable('#detail-law-form [name="reviewResult"]'),
+       '자동 반영 항목은 잠그고 검토결과만 입력할 수 있다');
+    await page.fill('#detail-law-form [name="reviewResult"]', '현장 설비 사양과 원문을 대조함');
     await page.click('#detail-law-save');
-    ok((await page.textContent('#detail-laws')).indexOf('연기 테스트') >= 0,
-       '법령 검토 기록을 설비별로 저장한다');
+    ok((await page.textContent('#detail-laws')).indexOf('현장 설비 사양과 원문을 대조함') >= 0,
+       '자동 입력된 요구사항과 검토결과를 설비별로 저장한다');
+    ok((await page.textContent('#detail-laws .law-summary')).length < 90
+       && await page.locator('#detail-laws [data-law-full]').count() > 0,
+       '저장 목록은 요구사항을 짧게 요약하고 전체 글보기 버튼을 제공한다');
+    await page.locator('#detail-laws [data-law-full]').first().click();
+    ok(await page.isVisible('#law-requirement-dialog')
+       && (await page.textContent('#law-requirement-full')).indexOf('제12조 제3항') >= 0,
+       '전체 글보기 팝업에서 잘리지 않은 법령 요구사항을 확인한다');
+    await page.click('#law-requirement-close');
     await page.click('#detail-close');
 
     await page.reload({ waitUntil: 'networkidle' });

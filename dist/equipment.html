@@ -183,17 +183,26 @@
 	    <div id="detail-law-document-status"></div>
 	    <div id="detail-law-comparison"></div>
 	    <h3 class="detail-subtitle">검토 기록 추가</h3>
+	    <p class="sub">위 비교표에서 「검토기록에 반영」을 누르면 법령명과 요구사항이 자동으로 채워집니다. 검토자는 검토결과만 입력하면 됩니다.</p>
 	    <form id="detail-law-form" class="grid-form compact-form">
-	      <label>법령명 <input name="law" required></label>
-	      <label>확인일 <input name="checkedAt" type="date" required></label>
-	      <label>확인자 <input name="reviewer"></label>
-	      <label>첨부/파일경로 <input name="filePath" placeholder="사내 법령자료 경로"></label>
-	      <label style="grid-column:1/-1">메모 <input name="note" placeholder="적용 조문, 판단 근거, 다음 확인사항"></label>
-	      <label class="check-label"><input name="needsReview" type="checkbox"> 재검토 필요</label>
+	      <label>법령명 <input name="law" required readonly></label>
+	      <label>확인일 <input name="checkedAt" type="date" required readonly></label>
+	      <label>확인자 <input name="reviewer" readonly></label>
+	      <label>첨부/파일경로 <input name="filePath" readonly placeholder="저장 법령의 사내 파일 경로"></label>
+	      <label style="grid-column:1/-1">법령 요구사항 <textarea name="requirement" rows="5" required readonly></textarea></label>
+	      <label style="grid-column:1/-1">검토결과 <textarea name="reviewResult" rows="4" required placeholder="설비 사양과 법령 요구사항을 확인한 결과를 입력하세요."></textarea></label>
+	      <input name="sourceStatus" type="hidden">
 	    </form>
 	    <div class="btnrow"><button class="btn primary" id="detail-law-save" type="button">검토 기록 저장</button></div>
-	    <div class="tablewrap detail-table"><table id="detail-laws"><thead><tr><th></th><th>법령명</th><th>확인일</th><th>확인자</th><th>재검토</th><th>파일경로</th><th>메모</th></tr></thead><tbody></tbody></table></div>
+	    <div class="tablewrap detail-table"><table id="detail-laws"><thead><tr><th></th><th>법령명</th><th>법령 요구사항</th><th>검토결과</th><th>확인일</th><th>확인자</th><th>재검토</th><th>파일경로</th></tr></thead><tbody></tbody></table></div>
 	  </section>
+	</dialog>
+	<dialog id="law-requirement-dialog" class="register-dialog law-text-dialog">
+	  <div class="register-head">
+	    <div><p class="eyebrow">저장된 검토기록</p><h2 id="law-requirement-title">법령 요구사항 전체 글</h2></div>
+	    <button class="btn" id="law-requirement-close" type="button">닫기</button>
+	  </div>
+	  <div class="law-text-body"><p id="law-requirement-full"></p></div>
 	</dialog>
 </div></main>
 
