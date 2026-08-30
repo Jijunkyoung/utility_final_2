@@ -79,8 +79,15 @@
   }
   function audit(settings, limit) { return request(settings, '/api/audit?limit=' + encodeURIComponent(limit || 30)); }
   function backup(settings) { return request(settings, '/api/backup', { method: 'POST', headers: jsonHeaders(settings), body: '{}' }, 30000); }
+  function sendNotification(settings, notification) {
+    return request(settings, '/api/notifications/send', { method: 'POST', headers: jsonHeaders(settings),
+      body: JSON.stringify({ id: notification.id, to: notification.recipientEmail,
+        subject: notification.subject, body: notification.body, status: notification.status,
+        approvedAt: notification.approvedAt, approvedBy: notification.approvedBy }) }, 30000);
+  }
 
   return { health: health, saveSettings: saveSettings, testStorage: testStorage,
     upload: upload, analyze: analyze, saveLaw: saveLaw, importLaw: importLaw, saveAnalysis: saveAnalysis,
-    loadState: loadState, saveState: saveState, audit: audit, backup: backup, sameOriginServer: sameOriginServer };
+    loadState: loadState, saveState: saveState, audit: audit, backup: backup,
+    sendNotification: sendNotification, sameOriginServer: sameOriginServer };
 });

@@ -10,9 +10,12 @@ import json
 import mimetypes
 import os
 import re
+import smtplib
+import ssl
 import sqlite3
 import tempfile
 from datetime import datetime, timezone
+from email.message import EmailMessage
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -36,11 +39,17 @@ DEFAULTS = {
     "lawApiOc": "",
     "allowedOrigins": [],
     "apiToken": "",
+    "smtpHost": "",
+    "smtpPort": 587,
+    "smtpUser": "",
+    "smtpPassword": "",
+    "smtpFrom": "",
+    "smtpStartTls": True,
 }
 
 SHARED_KEYS = (
     "equipments", "history", "consumables", "manuals", "lawReviews",
-    "lawDocuments", "analysisResults", "energy", "buildings", "managers",
+    "lawDocuments", "analysisResults", "energy", "buildings", "managers", "notificationQueue",
 )
 
 
@@ -63,7 +72,7 @@ def save_config(data: dict) -> None:
     for key in DEFAULTS:
         if key in data and data[key] not in (None, ""):
             old[key] = data[key]
-        elif key in data and key != "externalApiKey":
+        elif key in data and key not in ("externalApiKey", "smtpPassword"):
             old[key] = data[key]
     CONFIG_PATH.write_text(json.dumps(old, ensure_ascii=False, indent=2), encoding="utf-8")
     try:
@@ -117,6 +126,10 @@ def database(config: dict | None = None) -> sqlite3.Connection:
         id INTEGER PRIMARY KEY AUTOINCREMENT, revision INTEGER NOT NULL,
         action TEXT NOT NULL, actor TEXT, device_name TEXT, summary TEXT,
         created_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS notification_mail_log (
+        notification_id TEXT PRIMARY KEY, recipient TEXT NOT NULL,
+        subject TEXT NOT NULL, approved_by TEXT, sent_at TEXT NOT NULL
       );
     """)
     return conn
@@ -182,6 +195,68 @@ def create_backup() -> Path:
     finally:
         destination.close(); source.close()
     return target
+
+
+def mail_configured(config: dict | None = None) -> bool:
+    cfg = config or load_config()
+    return bool(str(cfg.get("smtpHost") or "").strip() and str(cfg.get("smtpFrom") or "").strip())
+
+
+def valid_email(value: str) -> str:
+    value = str(value or "").strip()
+    if len(value) > 254 or not re.fullmatch(r"[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,63}", value):
+        raise ValueError("받는 사람 메일 주소를 확인하세요.")
+    return value
+
+
+def send_notification_email(payload: dict, config: dict | None = None) -> dict:
+    cfg = config or load_config()
+    if not mail_configured(cfg):
+        raise RuntimeError("사내 메일 서버가 설정되지 않았습니다. server/config.local.json의 SMTP 항목을 확인하세요.")
+    recipient = valid_email(payload.get("to"))
+    sender = valid_email(cfg.get("smtpFrom"))
+    subject = str(payload.get("subject") or "").strip()
+    body = str(payload.get("body") or "").strip()
+    if not subject or len(subject) > 200 or "\n" in subject or "\r" in subject:
+        raise ValueError("메일 제목을 확인하세요.")
+    if not body or len(body) > 20000:
+        raise ValueError("메일 본문을 확인하세요.")
+    host = str(cfg.get("smtpHost") or "").strip()
+    port = int(cfg.get("smtpPort") or 587)
+    if not (1 <= port <= 65535):
+        raise ValueError("SMTP 포트 번호를 확인하세요.")
+    message = EmailMessage()
+    message["From"] = sender; message["To"] = recipient; message["Subject"] = subject
+    message.set_content(body)
+    with smtplib.SMTP(host, port, timeout=20) as client:
+        client.ehlo()
+        if bool(cfg.get("smtpStartTls", True)):
+            client.starttls(context=ssl.create_default_context()); client.ehlo()
+        user = str(cfg.get("smtpUser") or "").strip()
+        password = str(cfg.get("smtpPassword") or "")
+        if user:
+            if not password: raise RuntimeError("SMTP 계정 비밀번호가 설정되지 않았습니다.")
+            client.login(user, password)
+        client.send_message(message)
+    return {"ok": True, "to": recipient, "sentAt": now()}
+
+
+def send_approved_notification(payload: dict, config: dict | None = None) -> dict:
+    if payload.get("status") not in ("승인", "발송 실패") or not str(payload.get("approvedAt") or "").strip():
+        raise ValueError("승인 대기함에서 승인된 알림만 발송할 수 있습니다.")
+    notification_id = safe_segment(payload.get("id"), "")
+    if not notification_id:
+        raise ValueError("알림 ID를 확인하세요.")
+    with database(config) as conn:
+        old = conn.execute("SELECT sent_at FROM notification_mail_log WHERE notification_id=?", (notification_id,)).fetchone()
+    if old:
+        return {"ok": True, "duplicate": True, "sentAt": old["sent_at"]}
+    result = send_notification_email(payload, config)
+    with database(config) as conn:
+        conn.execute("INSERT INTO notification_mail_log(notification_id,recipient,subject,approved_by,sent_at) VALUES(?,?,?,?,?)",
+                     (notification_id, result["to"], str(payload.get("subject") or ""),
+                      safe_segment(payload.get("approvedBy"), "미지정 사용자"), result["sentAt"]))
+    return result
 
 
 def json_request(url: str, payload: dict, headers: dict | None = None, timeout: int = 90) -> dict:
@@ -395,11 +470,12 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/health":
             cfg = load_config()
             self.send_json(200, {"ok": True, "service": "Facility AI 사내 서버",
-                                 "sharedPath": str(shared_root(cfg)), "time": now()})
+                                 "sharedPath": str(shared_root(cfg)), "mailConfigured": mail_configured(cfg), "time": now()})
             return
         if parsed.path == "/api/settings":
-            cfg = load_config(); cfg.pop("externalApiKey", None)
-            self.send_json(200, {"ok": True, "settings": cfg, "hasExternalApiKey": bool(load_config().get("externalApiKey"))})
+            full = load_config(); cfg = dict(full); cfg.pop("externalApiKey", None); cfg.pop("smtpPassword", None)
+            self.send_json(200, {"ok": True, "settings": cfg, "hasExternalApiKey": bool(full.get("externalApiKey")),
+                                 "hasSmtpPassword": bool(full.get("smtpPassword")), "mailConfigured": mail_configured(full)})
             return
         if parsed.path == "/api/state":
             with database() as conn:
@@ -431,7 +507,9 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if parsed.path == "/api/settings":
                 payload = self.read_json(); save_config(payload)
-                self.send_json(200, {"ok": True, "saved": True, "hasExternalApiKey": bool(load_config().get("externalApiKey"))})
+                cfg = load_config()
+                self.send_json(200, {"ok": True, "saved": True, "hasExternalApiKey": bool(cfg.get("externalApiKey")),
+                                     "hasSmtpPassword": bool(cfg.get("smtpPassword")), "mailConfigured": mail_configured(cfg)})
                 return
             if parsed.path == "/api/settings/test":
                 payload = self.read_json(); path = Path(str(payload.get("sharedPath") or "").strip())
@@ -451,6 +529,9 @@ class Handler(BaseHTTPRequestHandler):
             if parsed.path == "/api/backup":
                 target = create_backup()
                 self.send_json(200, {"ok": True, "path": str(target)})
+                return
+            if parsed.path == "/api/notifications/send":
+                self.send_json(200, send_approved_notification(self.read_json()))
                 return
             if parsed.path == "/api/files":
                 q = parse_qs(parsed.query)

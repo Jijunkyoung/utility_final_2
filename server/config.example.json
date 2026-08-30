@@ -10,5 +10,11 @@
   "lawApiUrl": "https://www.law.go.kr/DRF",
   "lawApiOc": "",
   "allowedOrigins": [],
-  "apiToken": "회사에서 정한 충분히 긴 임의 문자열"
+  "apiToken": "회사에서 정한 충분히 긴 임의 문자열",
+  "smtpHost": "smtp.company.local",
+  "smtpPort": 587,
+  "smtpUser": "facility-notice@company.com",
+  "smtpPassword": "GitHub나 브라우저가 아닌 이 파일에만 입력",
+  "smtpFrom": "facility-notice@company.com",
+  "smtpStartTls": true
 }

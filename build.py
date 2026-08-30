@@ -256,6 +256,7 @@ PAGES["equipment.html"] = """
 	  <section class="detail-panel" data-detail-panel="history" hidden>
 	    <form id="detail-history-form" class="grid-form compact-form">
 	      <label>구분 <select name="kind"><option>유지보수</option><option>고장 AS</option><option>법정검사</option><option>소모품 교체</option><option>기타</option></select></label>
+	      <label data-history-consumable hidden>교체 소모품 <select name="consumableId"></select></label>
 	      <label>일자 <input name="date" type="date" required></label>
 	      <label>업체 <input name="vendor"></label>
 	      <label>금액(원) <input name="cost" type="number" min="0" step="1000" placeholder="모르면 비워 둠"></label>
@@ -354,17 +355,24 @@ PAGES["alerts.html"] = """
   <tbody></tbody></table></div>
 
 <div class="note" id="mail-note">
-  <b>메일 발송은 이 도구가 하지 않습니다.</b>
-  자동 발송에는 서버와 메일 계정이 필요하고, 사내 폐쇄망에서는 나갈 수 없습니다.
-  대신 아래 버튼으로 <b>알릴 내용을 만들어</b> 드립니다. 복사해 사내 메일로 보내세요.
+  <b>알림은 바로 발송되지 않습니다.</b>
+  임박 항목을 승인 대기함에 추가한 뒤 담당자가 내용을 확인하고 승인해야 발송할 수 있습니다.
+  사내 메일 서버가 설정되지 않은 환경에서는 문안을 복사해 Outlook 등에서 보낸 후 발송완료로 처리하세요.
   <div class="btnrow">
-    <button class="btn" id="make-mail">알림 문안 만들기</button>
+    <button class="btn primary" id="queue-alerts">현재 임박 항목을 승인 대기함에 추가</button>
+    <button class="btn" id="make-mail">전체 알림 문안 만들기</button>
     <button class="btn" id="copy-mail" disabled>복사</button>
   </div>
   <textarea id="mail-body" rows="10" hidden
     style="width:100%;margin-top:12px;font-family:ui-monospace,monospace;font-size:13px;
            padding:12px;border:1px solid var(--line);border-radius:8px"></textarea>
 </div>
+
+<h2>알림 승인 대기함 <span class="sub" id="notification-count"></span></h2>
+<div id="notification-status"></div>
+<div class="tablewrap"><table id="notification-table">
+  <thead><tr><th>상태</th><th>기한</th><th>담당자</th><th>메일</th><th>설비·항목</th><th>제목</th><th>작업</th></tr></thead>
+  <tbody></tbody></table></div>
 """
 
 # ─────────────────────────────────────────────────────────── 이력
@@ -377,6 +385,7 @@ PAGES["history.html"] = """
       <select name="kind">
         <option>법정검사</option><option>소모품 교체</option><option>고장 AS</option><option>기타</option>
       </select></label>
+    <label data-history-consumable hidden>교체 소모품 <select name="consumableId"></select></label>
     <label>일자 <input name="date" type="date" required></label>
     <label>금액(원) <input name="cost" type="number" min="0" step="1000" placeholder="모르면 비워 둡니다"></label>
     <label>업체 <input name="vendor"></label>
@@ -384,12 +393,13 @@ PAGES["history.html"] = """
   </form>
   <div class="note" style="margin-bottom:0">
     <b>금액을 모르면 비워 두세요.</b> 0 을 넣으면 비용 예측에서 <b>0 원짜리 항목</b>으로 잡혀
-    예산이 실제보다 적게 나옵니다. 비워 두면 “미상”으로 따로 세어 눈에 보입니다.
+    예산이 실제보다 적게 나옵니다. 법정검사 또는 교체 소모품을 선택해 저장하면 마지막 완료일과 다음 예정일이 자동 갱신됩니다.
   </div>
+  <div id="history-save-status"></div>
   <div class="btnrow">
     <button class="btn primary" id="h-save">추가</button>
-    <button class="btn" id="h-apply" title="법정검사·소모품 교체 이력을 설비의 마지막 일자에 반영합니다">
-      마지막 일자에 반영</button>
+    <button class="btn" id="h-apply" title="기존 법정검사·소모품 교체 이력을 마지막 완료일에 다시 반영합니다">
+      기존 이력 다시 반영</button>
   </div>
 </div>
 

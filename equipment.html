@@ -136,6 +136,7 @@
 	  <section class="detail-panel" data-detail-panel="history" hidden>
 	    <form id="detail-history-form" class="grid-form compact-form">
 	      <label>구분 <select name="kind"><option>유지보수</option><option>고장 AS</option><option>법정검사</option><option>소모품 교체</option><option>기타</option></select></label>
+	      <label data-history-consumable hidden>교체 소모품 <select name="consumableId"></select></label>
 	      <label>일자 <input name="date" type="date" required></label>
 	      <label>업체 <input name="vendor"></label>
 	      <label>금액(원) <input name="cost" type="number" min="0" step="1000" placeholder="모르면 비워 둠"></label>
