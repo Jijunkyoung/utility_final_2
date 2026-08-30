@@ -12,9 +12,9 @@
   'use strict';
 
   var KEY = 'hd-facility-v1';
-  var SCHEMA_VERSION = 4;
+  var SCHEMA_VERSION = 5;
   var SHARED_KEYS = ['equipments', 'history', 'consumables', 'manuals', 'lawReviews',
-    'lawDocuments', 'analysisResults', 'energy', 'buildings', 'managers'];
+    'lawDocuments', 'analysisResults', 'energy', 'buildings', 'managers', 'notificationQueue'];
 
   var EMPTY = {
     schemaVersion: SCHEMA_VERSION,
@@ -28,6 +28,7 @@
     energy: [],       // 에너지 사용량
     buildings: [],    // {id,name,x,y,w,h} — 조감도와 설비를 이름으로 연결
     managers: [],     // 법정선임·유지관리 담당자 통합 대장
+    notificationQueue: [], // 검사·교체 알림 승인/발송 기록
     settings: {
       /* 서버 주소는 사용자가 설정 화면에서 명시적으로 넣은 뒤에만 접속한다.
        * 기본값으로 localhost를 호출하면 서버를 설치하지 않은 브라우저마다 오류가 남는다. */
@@ -154,7 +155,7 @@
   function removeEquipment(input, equipmentId) {
     var d = normalize(input);
     d.equipments = d.equipments.filter(function (x) { return x.id !== equipmentId; });
-    ['history', 'consumables', 'manuals', 'lawReviews', 'lawDocuments', 'analysisResults'].forEach(function (key) {
+    ['history', 'consumables', 'manuals', 'lawReviews', 'lawDocuments', 'analysisResults', 'notificationQueue'].forEach(function (key) {
       d[key] = d[key].filter(function (x) { return x.equipmentId !== equipmentId; });
     });
     return d;

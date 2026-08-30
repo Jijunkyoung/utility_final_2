@@ -270,13 +270,33 @@ function serve(port) {
     if (!mail) mail = (await page.textContent('#mail-body')) || '';
     ok(mail.replace(/\s+/g, '').length > 0, '담당자별 알림 문안이 만들어진다',
        mail.slice(0, 80));
-    ok(await page.isVisible('#copy-mail'), '복사 단추가 있다 (직접 보내지는 않는다)');
+    ok(await page.isVisible('#copy-mail'), 'SMTP 미설정 환경을 위한 수동 복사 단추가 있다');
+    await page.click('#queue-alerts');
+    ok(await page.locator('#notification-table [data-notice-approve]').count() > 0,
+       '임박한 검사·교체 알림을 승인 대기함에 추가한다');
+    await page.locator('#notification-table [data-notice-approve]').first().click();
+    ok((await page.textContent('#notification-table')).indexOf('승인') >= 0
+       && await page.locator('#notification-table [data-notice-complete]').count() > 0,
+       '담당자가 승인한 알림만 발송 또는 수동 완료 처리할 수 있다');
 
     group('6. 이력 — 금액을 모르면 「미상」');
     await go('history.html');
     ok(await page.locator('#h-table tbody tr').count() > 0, '이력 표에 줄이 있다');
     var hsum = (await page.textContent('#h-sum')).replace(/\s+/g, ' ');
     ok(hsum.length > 0, '설비별 누계가 나온다', hsum.slice(0, 100));
+    var target = await page.evaluate(function () {
+      var d = Store.load(), c = d.consumables[0]; return c && { equipmentId: c.equipmentId, consumableId: c.id };
+    });
+    await page.selectOption('#h-eq', target.equipmentId);
+    await page.selectOption('#h-form [name="kind"]', '소모품 교체');
+    ok(await page.isVisible('#h-form [data-history-consumable]'), '소모품 교체 이력에서는 교체한 품목을 직접 선택한다');
+    await page.selectOption('#h-form [name="consumableId"]', target.consumableId);
+    await page.fill('#h-form [name="date"]', '2026-08-30');
+    await page.fill('#h-form [name="memo"]', '자동 완료일 반영 시험');
+    await page.click('#h-save');
+    ok(await page.evaluate(function (id) {
+      var c = Store.load().consumables.find(function (x) { return x.id === id; }); return c && c.lastDate === '2026-08-30';
+    }, target.consumableId), '교체 이력을 저장하면 해당 소모품의 마지막 교체일을 자동 갱신한다');
 
     group('7. 비용 — 셀 수 없었던 것을 따로 남긴다');
     await go('cost.html');

@@ -2,6 +2,7 @@ import json
 import tempfile
 import threading
 import unittest
+from unittest import mock
 from pathlib import Path
 import sys
 from http.server import ThreadingHTTPServer
@@ -24,9 +25,10 @@ class FacilityServerTest(unittest.TestCase):
 
     def test_config_keeps_api_key_server_side(self):
         share = self.root / "share"
-        server.save_config({"sharedPath": str(share), "externalApiKey": "secret-key"})
+        server.save_config({"sharedPath": str(share), "externalApiKey": "secret-key", "smtpPassword": "mail-secret"})
         data = server.load_config()
         self.assertEqual(data["externalApiKey"], "secret-key")
+        self.assertEqual(data["smtpPassword"], "mail-secret")
         self.assertEqual(data["sharedPath"], str(share))
         self.assertEqual(server.DEFAULTS["apiToken"], "")
 
@@ -122,6 +124,41 @@ class FacilityServerTest(unittest.TestCase):
         self.assertNotIn("..", value)
         self.assertNotIn("/", value)
         self.assertNotIn("?", value)
+
+    def test_smtp_send_uses_server_side_settings(self):
+        config = {**server.DEFAULTS, "smtpHost": "smtp.company.local", "smtpPort": 587,
+                  "smtpFrom": "facility@company.com", "smtpStartTls": True}
+        with mock.patch.object(server.smtplib, "SMTP") as smtp:
+            client = smtp.return_value.__enter__.return_value
+            result = server.send_notification_email({
+                "to": "manager@company.com", "subject": "검사 예정 안내", "body": "확인해 주세요."
+            }, config)
+        self.assertTrue(result["ok"])
+        smtp.assert_called_once_with("smtp.company.local", 587, timeout=20)
+        client.starttls.assert_called_once()
+        client.send_message.assert_called_once()
+
+    def test_smtp_rejects_invalid_recipient_and_header_injection(self):
+        config = {**server.DEFAULTS, "smtpHost": "smtp.company.local", "smtpFrom": "facility@company.com"}
+        with self.assertRaises(ValueError):
+            server.send_notification_email({"to": "not-an-email", "subject": "안내", "body": "본문"}, config)
+        with self.assertRaises(ValueError):
+            server.send_notification_email({"to": "manager@company.com", "subject": "안내\nBcc: bad@example.com", "body": "본문"}, config)
+
+    def test_only_approved_notification_is_sent_once(self):
+        config = {**server.DEFAULTS, "sharedPath": str(self.root / "share"),
+                  "smtpHost": "smtp.company.local", "smtpFrom": "facility@company.com"}
+        payload = {"id": "notice-1", "to": "manager@company.com", "subject": "검사 안내", "body": "본문",
+                   "status": "승인", "approvedAt": "2026-08-30T00:00:00Z", "approvedBy": "시설팀"}
+        with mock.patch.object(server.smtplib, "SMTP") as smtp:
+            client = smtp.return_value.__enter__.return_value
+            first = server.send_approved_notification(payload, config)
+            second = server.send_approved_notification(payload, config)
+        self.assertTrue(first["ok"])
+        self.assertTrue(second["duplicate"])
+        client.send_message.assert_called_once()
+        with self.assertRaises(ValueError):
+            server.send_approved_notification({**payload, "id": "notice-2", "status": "대기"}, config)
 
 
 if __name__ == "__main__":

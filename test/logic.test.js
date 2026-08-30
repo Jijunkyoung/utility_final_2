@@ -184,18 +184,19 @@ const recheck = L.needsReview([
 ]);
 ok(/재검토/.test(recheck[0].reasons.join()), '재검토 필요 표시를 확인 필요 목록에 반영한다');
 
-/* ── ⑤ 저장 자료 v1 → v4 하위호환·공용 자료 분리 ────────────────── */
+/* ── ⑤ 저장 자료 v1 → v5 하위호환·공용 자료 분리 ────────────────── */
 
 const migrated = St.normalize({
   equipments: [{ id: 'eq1', name: '온수보일러', building: '본관' }],
   history: [], consumables: [], energy: []
 });
-eq(migrated.schemaVersion, 4, '이전 자료를 현재 스키마 버전으로 올린다');
+eq(migrated.schemaVersion, 5, '이전 자료를 현재 스키마 버전으로 올린다');
 ok(Array.isArray(migrated.manuals) && Array.isArray(migrated.lawReviews),
    '  매뉴얼·법령 검토 컬렉션을 빈 배열로 보완한다');
 ok(Array.isArray(migrated.lawDocuments) && Array.isArray(migrated.analysisResults),
    '  내부 법령 원문·분석 결과 컬렉션을 빈 배열로 보완한다');
 ok(Array.isArray(migrated.managers), '  담당자 통합 대장을 빈 배열로 보완한다');
+ok(Array.isArray(migrated.notificationQueue), '  알림 승인·발송 기록 컬렉션을 빈 배열로 보완한다');
 eq(migrated.settings.aiMode, 'rules', '  AI를 설정하기 전에는 규칙 기반으로 안전하게 시작한다');
 eq(migrated.buildings[0].name, '본관', '  설비의 건물명으로 좌표 레코드를 만든다');
 ok(['x', 'y', 'w', 'h'].every(k => Number.isFinite(migrated.buildings[0][k])),
@@ -211,6 +212,7 @@ const localAndShared = St.normalize({
 const payload = St.sharedPayload(localAndShared);
 ok(Array.isArray(payload.equipments) && Array.isArray(payload.managers),
    '공용 저장 자료에는 설비와 담당자 대장을 포함한다');
+ok(Array.isArray(payload.notificationQueue), '알림 승인·발송 기록도 공용 DB에 포함한다');
 ok(!Object.prototype.hasOwnProperty.call(payload, 'settings') && JSON.stringify(payload).indexOf('browser-only-secret') < 0,
    '브라우저 토큰과 PC별 설정은 공용 DB에 보내지 않는다');
 const applied = St.applyShared(localAndShared, { equipments: [{ id: 'eq-server' }], managers: [] }, { revision: 7 });
@@ -228,8 +230,8 @@ const removed = St.removeEquipment({
 }, 'eq1');
 eq(removed.equipments.map(x => x.id), ['eq2'], '설비를 삭제한다');
 eq(removed.history.map(x => x.equipmentId), ['eq2'], '  다른 설비 이력은 남긴다');
-ok(['consumables', 'manuals', 'lawReviews', 'lawDocuments', 'analysisResults'].every(k => removed[k].length === 0),
-   '  연결된 소모품·매뉴얼·법령 원문·분석 기록도 함께 삭제한다');
+ok(['consumables', 'manuals', 'lawReviews', 'lawDocuments', 'analysisResults', 'notificationQueue'].every(k => removed[k].length === 0),
+   '  연결된 소모품·매뉴얼·법령 원문·분석·알림 기록도 함께 삭제한다');
 
 /* ── ⑥ 매뉴얼·법령 분석 ─────────────────────────────────────────── */
 

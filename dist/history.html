@@ -59,6 +59,7 @@
       <select name="kind">
         <option>법정검사</option><option>소모품 교체</option><option>고장 AS</option><option>기타</option>
       </select></label>
+    <label data-history-consumable hidden>교체 소모품 <select name="consumableId"></select></label>
     <label>일자 <input name="date" type="date" required></label>
     <label>금액(원) <input name="cost" type="number" min="0" step="1000" placeholder="모르면 비워 둡니다"></label>
     <label>업체 <input name="vendor"></label>
@@ -66,12 +67,13 @@
   </form>
   <div class="note" style="margin-bottom:0">
     <b>금액을 모르면 비워 두세요.</b> 0 을 넣으면 비용 예측에서 <b>0 원짜리 항목</b>으로 잡혀
-    예산이 실제보다 적게 나옵니다. 비워 두면 “미상”으로 따로 세어 눈에 보입니다.
+    예산이 실제보다 적게 나옵니다. 법정검사 또는 교체 소모품을 선택해 저장하면 마지막 완료일과 다음 예정일이 자동 갱신됩니다.
   </div>
+  <div id="history-save-status"></div>
   <div class="btnrow">
     <button class="btn primary" id="h-save">추가</button>
-    <button class="btn" id="h-apply" title="법정검사·소모품 교체 이력을 설비의 마지막 일자에 반영합니다">
-      마지막 일자에 반영</button>
+    <button class="btn" id="h-apply" title="기존 법정검사·소모품 교체 이력을 마지막 완료일에 다시 반영합니다">
+      기존 이력 다시 반영</button>
   </div>
 </div>
 

@@ -142,11 +142,11 @@
     var out = [];
     db.equipments.forEach(function (e) {
       var r = S.nextInspection(e.lastInspect, e.cycleMonths, t, leadI);
-      out.push({ type: '법정검사', eq: e, item: '정기검사', r: r, cost: e.inspectCost });
+      out.push({ type: '법정검사', sourceId: e.id, eq: e, item: '정기검사', r: r, cost: e.inspectCost });
     });
     db.consumables.forEach(function (c) {
       var r = S.nextReplacement(c.lastDate, c.cycleMonths, t, leadR);
-      out.push({ type: '소모품', eq: eqById(c.equipmentId), item: c.name, r: r, cost: c.cost });
+      out.push({ type: '소모품', sourceId: c.id, eq: eqById(c.equipmentId), item: c.name, r: r, cost: c.cost });
     });
     // 임박한 것이 위로. 모르는 것(이력 없음·주기 없음)은 맨 아래로 — 정렬에 섞으면
     // 남은 일수가 null 이라 순서가 뒤죽박죽이 된다.
@@ -301,6 +301,9 @@
     $('#detail-law-document-save').addEventListener('click', saveLawDocumentContent);
     $('#detail-law-document-new').addEventListener('click', newLawDocumentForm);
     $('#detail-law-review-run').addEventListener('click', runLawReview);
+    $('#detail-history-form [name=kind]').addEventListener('change', function () {
+      syncHistoryConsumables($('#detail-history-form'), currentDetailEquipmentId);
+    });
     $('#law-requirement-close').addEventListener('click', function () {
       var dialog = $('#law-requirement-dialog');
       if (dialog.close) dialog.close(); else dialog.removeAttribute('open');
@@ -503,6 +506,7 @@
     renderDetailBasic(e);
     renderDetailConsumables(e);
     renderDetailHistory(e);
+    syncHistoryConsumables($('#detail-history-form'), e.id);
     renderDetailManuals(e);
     renderDetailLaws(e);
   }
@@ -554,13 +558,10 @@
     $$('[name]', f).forEach(function (i) { o[i.name] = i.value.trim(); });
     o.cost = o.cost === '' ? null : Number(o.cost);
     db.history.push(o);
-    if (o.kind === '법정검사' && (!e.lastInspect || o.date > e.lastInspect)) e.lastInspect = o.date;
-    db.consumables.forEach(function (c) {
-      if (c.equipmentId === e.id && o.kind === '소모품 교체'
-          && o.memo.indexOf(c.name) >= 0 && (!c.lastDate || o.date > c.lastDate)) c.lastDate = o.date;
-    });
+    applyCompletedHistory(o);
     if (persist()) {
       f.reset(); f.querySelector('[name=date]').value = today();
+      syncHistoryConsumables(f, e.id);
       renderDetailHistory(e); renderDetailConsumables(e); renderEquipment();
     }
   }
@@ -1066,6 +1067,7 @@
       $(s).addEventListener('input', renderAlerts);
     });
     $('#make-mail').addEventListener('click', makeMail);
+    $('#queue-alerts').addEventListener('click', queueCurrentAlerts);
     $('#copy-mail').addEventListener('click', function () {
       var ta = $('#mail-body');
       ta.select();
@@ -1074,7 +1076,7 @@
       var b = this;
       setTimeout(function () { b.textContent = '복사'; }, 1600);
     });
-    renderAlerts();
+    renderAlerts(); renderNotificationQueue();
   }
 
   function leads() {
@@ -1156,11 +1158,119 @@
     $('#copy-mail').disabled = false;
   }
 
+  function notificationKey(d) {
+    return [d.type, d.sourceId, d.r.nextText || '기한미상'].join('|');
+  }
+
+  function notificationText(d, 기준일) {
+    var eq = d.eq, remaining = d.r.dday < 0 ? Math.abs(d.r.dday) + '일 지남' : d.r.dday + '일 남음';
+    return '안녕하세요. ' + ((eq && eq.mgr) || '유지관리 담당자') + '님.\n\n'
+      + '다음 설비의 ' + d.item + ' 일정이 도래하여 안내드립니다.\n\n'
+      + '· 설비: ' + (eq ? ((eq.code ? eq.code + ' ' : '') + eq.name) : '(설비 없음)') + '\n'
+      + '· 구분: ' + d.type + '\n· 예정일: ' + d.r.nextText + ' (' + remaining + ')\n'
+      + (eq && (eq.place || eq.building) ? '· 위치: ' + (eq.place || eq.building) + '\n' : '')
+      + '\n' + 기준일 + ' 기준 안내입니다. 확인 후 일정을 조율해 주세요.';
+  }
+
+  function queueCurrentAlerts() {
+    var p = leads(), added = 0, skipped = 0;
+    var due = allDue(p.t, p.i, p.r).filter(function (d) {
+      return d.r.status === '기한 초과' || d.r.status === '알림' || d.r.status === '오늘';
+    });
+    due.forEach(function (d) {
+      var key = notificationKey(d);
+      if (db.notificationQueue.some(function (n) { return n.key === key && n.status !== '취소'; })) { skipped++; return; }
+      var eq = d.eq || {};
+      db.notificationQueue.push({ id: St.newId('n'), key: key, type: d.type, sourceId: d.sourceId,
+        equipmentId: eq.id || '', item: d.item, dueDate: d.r.nextText || '', recipientName: eq.mgr || '',
+        recipientEmail: eq.mgrEmail || '', subject: '[설비] ' + (eq.name || '설비') + ' ' + d.item + ' 예정 안내',
+        body: notificationText(d, p.t), status: '대기', createdAt: new Date().toISOString(),
+        approvedAt: '', approvedBy: '', sentAt: '', sentBy: '', lastError: '' });
+      added++;
+    });
+    if (!due.length) { statusLine('#notification-status', false, '현재 승인 대기함에 추가할 임박 항목이 없습니다.'); return; }
+    if (persist()) {
+      renderNotificationQueue();
+      statusLine('#notification-status', true, added + '건을 추가했습니다.' + (skipped ? ' 이미 등록된 ' + skipped + '건은 제외했습니다.' : ''));
+    }
+  }
+
+  function copyPlain(value) {
+    var ta = document.createElement('textarea'); ta.value = value; ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select();
+    var ok = false; try { ok = document.execCommand('copy'); } catch (e) {} ta.remove(); return ok;
+  }
+
+  function renderNotificationQueue() {
+    var list = (db.notificationQueue || []).slice().sort(function (a, b) {
+      var rank = { '대기': 0, '승인': 1, '발송 실패': 2, '발송완료': 3, '취소': 4 };
+      return (rank[a.status] || 0) - (rank[b.status] || 0) || (a.createdAt < b.createdAt ? 1 : -1);
+    });
+    $('#notification-count').textContent = list.length + '건';
+    $('#notification-table tbody').innerHTML = list.length ? list.map(function (n) {
+      var actions = '<button class="btn small-btn" data-notice-copy="' + esc(n.id) + '">복사</button>';
+      if (n.status === '대기') actions += '<button class="btn primary small-btn" data-notice-approve="' + esc(n.id) + '">승인</button>';
+      if (n.status === '승인' || n.status === '발송 실패') actions += '<button class="btn green small-btn" data-notice-send="' + esc(n.id) + '"'
+        + (!n.recipientEmail ? ' disabled title="담당자 메일이 없습니다"' : '') + '>메일 발송</button>'
+        + '<button class="btn small-btn" data-notice-complete="' + esc(n.id) + '">수동 발송완료</button>';
+      if (n.status !== '발송완료') actions += '<button class="btn small-btn" data-notice-cancel="' + esc(n.id) + '">취소</button>';
+      return '<tr><td>' + esc(n.status) + (n.lastError ? '<div class="sub" style="white-space:normal">' + esc(n.lastError) + '</div>' : '')
+        + '</td><td class="mono">' + esc(n.dueDate || '—') + '</td><td>' + esc(n.recipientName || '미지정')
+        + '</td><td>' + esc(n.recipientEmail || '미입력') + '</td><td>' + esc(eqName(n.equipmentId)) + ' · ' + esc(n.item)
+        + '</td><td style="white-space:normal">' + esc(n.subject) + '</td><td><div class="btnrow" style="margin:0">' + actions + '</div></td></tr>';
+    }).join('') : '<tr><td colspan="7" class="sub">승인 대기 알림이 없습니다.</td></tr>';
+    $$('#notification-table [data-notice-copy]').forEach(function (b) {
+      b.addEventListener('click', function () { var n = notice(b, 'data-notice-copy'); if (n) copyPlain('받는 사람: ' + n.recipientName + ' <' + n.recipientEmail + '>\n제목: ' + n.subject + '\n\n' + n.body); });
+    });
+    $$('#notification-table [data-notice-approve]').forEach(function (b) {
+      b.addEventListener('click', function () { var n = notice(b, 'data-notice-approve'); if (!n) return;
+        n.status = '승인'; n.approvedAt = new Date().toISOString(); n.approvedBy = db.settings.syncActor || '미지정 사용자'; n.lastError = '';
+        if (persist()) renderNotificationQueue(); });
+    });
+    $$('#notification-table [data-notice-complete]').forEach(function (b) {
+      b.addEventListener('click', function () { var n = notice(b, 'data-notice-complete'); if (!n) return;
+        n.status = '발송완료'; n.sentAt = new Date().toISOString(); n.sentBy = db.settings.syncActor || '수동 발송'; n.lastError = '';
+        if (persist()) renderNotificationQueue(); });
+    });
+    $$('#notification-table [data-notice-cancel]').forEach(function (b) {
+      b.addEventListener('click', function () { var n = notice(b, 'data-notice-cancel'); if (!n || !confirm('이 알림을 취소할까요?')) return;
+        n.status = '취소'; if (persist()) renderNotificationQueue(); });
+    });
+    $$('#notification-table [data-notice-send]').forEach(function (b) {
+      b.addEventListener('click', function () { sendNotification(notice(b, 'data-notice-send')); });
+    });
+  }
+
+  function notice(button, attr) {
+    var id = button.getAttribute(attr);
+    return (db.notificationQueue || []).find(function (n) { return n.id === id; });
+  }
+
+  function sendNotification(n) {
+    if (!n || (n.status !== '승인' && n.status !== '발송 실패')) return;
+    statusLine('#notification-status', true, '사내 메일 서버로 발송하고 있습니다.');
+    I.sendNotification(db.settings, n).then(function (r) {
+      if (r.ok) {
+        n.status = '발송완료'; n.sentAt = r.sentAt || new Date().toISOString();
+        n.sentBy = db.settings.syncActor || '사내 메일 서버'; n.lastError = '';
+        persist(); renderNotificationQueue(); statusLine('#notification-status', true, '메일 발송을 완료했습니다.');
+      } else {
+        n.status = '발송 실패'; n.lastError = r.error || '사내 메일 서버 설정을 확인하세요.';
+        persist(); renderNotificationQueue(); statusLine('#notification-status', false, n.lastError);
+      }
+    });
+  }
+
   /* ═══════════════════════════════════════════════════ 이력 */
 
   function initHistory() {
     fillEqSelect($('#h-eq'));
     $('#h-form [name=date]').value = today();
+    syncHistoryConsumables($('#h-form'), $('#h-eq').value);
+    $('#h-eq').addEventListener('change', function () { syncHistoryConsumables($('#h-form'), this.value); });
+    $('#h-form [name=kind]').addEventListener('change', function () {
+      syncHistoryConsumables($('#h-form'), $('#h-eq').value);
+    });
     $('#h-save').addEventListener('click', function (ev) {
       ev.preventDefault();
       var f = $('#h-form');
@@ -1170,7 +1280,12 @@
       // 빈 금액은 null. 0 으로 두면 "0 원짜리 공사" 가 되어 예측이 낮아진다.
       o.cost = o.cost === '' ? null : Number(o.cost);
       db.history.push(o);
-      if (persist()) { f.reset(); $('#h-form [name=date]').value = today(); renderHistory(); }
+      var changed = applyCompletedHistory(o);
+      if (persist()) {
+        f.reset(); $('#h-form [name=date]').value = today(); syncHistoryConsumables(f, $('#h-eq').value); renderHistory();
+        statusLine('#history-save-status', true, changed
+          ? '이력을 저장하고 마지막 완료일·다음 예정일을 자동 갱신했습니다.' : '이력을 저장했습니다.');
+      }
     });
     $('#h-apply').addEventListener('click', applyLatestToEquipment);
     renderHistory();
@@ -1182,6 +1297,40 @@
           return '<option value="' + esc(e.id) + '">' + esc(e.code ? e.code + ' ' + e.name : e.name) + '</option>';
         }).join('')
       : '<option value="">— 설비를 먼저 등록하세요 —</option>';
+  }
+
+  function syncHistoryConsumables(form, equipmentId) {
+    if (!form) return;
+    var kind = form.querySelector('[name=kind]'), wrap = form.querySelector('[data-history-consumable]');
+    var select = form.querySelector('[name=consumableId]');
+    if (!kind || !wrap || !select) return;
+    var shown = kind.value === '소모품 교체';
+    wrap.hidden = !shown; select.required = shown;
+    if (!shown) { select.value = ''; return; }
+    var list = St.forEquipment(db.consumables, equipmentId);
+    select.innerHTML = '<option value="">— 교체한 소모품 선택 —</option>' + list.map(function (c) {
+      return '<option value="' + esc(c.id) + '">' + esc(c.name) + '</option>';
+    }).join('');
+  }
+
+  function applyCompletedHistory(h) {
+    var e = eqById(h.equipmentId), changed = 0;
+    if (!e || !S.parseDate(h.date)) return changed;
+    if (h.kind === '법정검사' && (!e.lastInspect || h.date >= e.lastInspect)) {
+      if (e.lastInspect !== h.date) { e.lastInspect = h.date; changed++; }
+      if (h.cost !== null && Number.isFinite(Number(h.cost))) e.inspectCost = Number(h.cost);
+    }
+    if (h.kind === '소모품 교체') {
+      var c = db.consumables.find(function (item) {
+        return item.equipmentId === h.equipmentId && (item.id === h.consumableId
+          || (!h.consumableId && (h.memo || '').indexOf(item.name) >= 0));
+      });
+      if (c && (!c.lastDate || h.date >= c.lastDate)) {
+        if (c.lastDate !== h.date) { c.lastDate = h.date; changed++; }
+        if (h.cost !== null && Number.isFinite(Number(h.cost))) c.cost = Number(h.cost);
+      }
+    }
+    return changed;
   }
 
   function renderHistory() {
@@ -1233,11 +1382,11 @@
     db.consumables.forEach(function (c) {
       var mine = db.history.filter(function (h) {
         return h.equipmentId === c.equipmentId && h.kind === '소모품 교체'
-          && S.parseDate(h.date) && (h.memo || '').indexOf(c.name) >= 0;
+          && S.parseDate(h.date) && (h.consumableId === c.id || (!h.consumableId && (h.memo || '').indexOf(c.name) >= 0));
       }).sort(function (a, b) { return a.date < b.date ? 1 : -1; });
       if (mine.length && mine[0].date !== c.lastDate) { c.lastDate = mine[0].date; changed++; }
     });
-    if (!changed) { alert('반영할 것이 없습니다.\n\n소모품은 이력의 “내용” 에 소모품 이름이 들어 있어야 짝지어집니다.'); return; }
+    if (!changed) { alert('반영할 것이 없습니다.\n\n예전 이력은 내용에 소모품 이름이 있어야 연결되며, 새 이력은 교체 소모품을 직접 선택합니다.'); return; }
     if (persist()) alert(changed + '건을 반영했습니다.');
   }
 

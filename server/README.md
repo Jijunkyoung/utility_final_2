@@ -17,6 +17,16 @@
 실제 설정과 API 키는 Git에 포함되지 않는 `config.local.json`에 저장됩니다. 회사의
 Windows 권한으로 이 파일을 관리자만 읽을 수 있게 제한하세요.
 
+## 사내 메일 알림
+
+알림 화면에서 승인된 건만 사내 서버를 통해 발송할 수 있습니다. `config.local.json`에
+`smtpHost`, `smtpPort`, `smtpFrom`을 설정하고, 인증이 필요한 경우에만 `smtpUser`와
+`smtpPassword`를 입력합니다. 회사 메일 서버가 TLS를 지원하면 `smtpStartTls`를 `true`로
+유지하세요. 비밀번호는 브라우저·공용 DB·GitHub로 보내지 않으며 이 서버 설정 파일에서만 읽습니다.
+
+SMTP 정보는 회사 IT 담당자에게 확인하세요. 보안프로그램이나 방화벽을 우회하거나 임의 포트를
+개방하지 말고, 메일 서버 접속이 승인되지 않은 경우 알림 문안을 복사해 수동 발송합니다.
+
 ## 여러 PC에서 사용하기
 
 `start_server_lan.bat`는 회사 IT/보안 담당자가 포트 사용과 Windows 방화벽 정책을 승인한
