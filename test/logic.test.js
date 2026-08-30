@@ -252,6 +252,16 @@ const lawAnalysis = A.law({ legalMgr: '', pressure: '0.98 MPa' }, [{
 ok(lawAnalysis.rows.length >= 2, '저장한 법령 원문에서 비교할 요구사항을 찾는다');
 ok(lawAnalysis.rows.some(x => x.status === '정보 부족'), '설비 값이 없으면 충족으로 단정하지 않는다');
 ok(lawAnalysis.rows.every(x => x.status !== '충족'), '규칙 분석만으로 법적 충족 판정을 만들지 않는다');
+const detailedLaw = A.law({ capacity: '1.5 t/h', legalMgr: '이정민' }, [{
+  id: 'law-detail-1', law: '에너지이용합리화법',
+  content: '제12조 제3항에서는 용량 1.0 t/h 이상인 경우 법정선임관리자를 선임하여야 한다.'
+}]).rows[0];
+ok(/제12조 제3항/.test(detailedLaw.requirementDetail), '상세 요구사항에 원문 조문 번호를 표시한다');
+ok(/1.0 t\/h 이상/.test(detailedLaw.requirementDetail), '상세 요구사항에 원문의 정량 기준을 표시한다');
+ok(/1.5 t\/h/.test(detailedLaw.requirementDetail) && /이정민/.test(detailedLaw.requirementDetail),
+   '상세 요구사항에 설비의 실제 용량과 법정선임관리자를 함께 비교한다');
+ok(/정량 기준.*확인되지/.test(lawAnalysis.rows[0].requirementDetail),
+   '원문에 없는 수치 기준은 지어내지 않고 추가 확인 대상으로 표시한다');
 ok(/JSON/.test(A.prompt('manual', {}, '필터 교체')), 'AI 요청도 JSON 근거 구조를 요구한다');
 ok(typeof I.health === 'function' && typeof I.analyze === 'function'
    && typeof I.loadState === 'function' && typeof I.saveState === 'function' && typeof I.backup === 'function',
