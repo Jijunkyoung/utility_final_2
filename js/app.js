@@ -37,6 +37,11 @@
     return Number(n).toLocaleString('ko-KR') + '원';
   }
   function today() { return S.fmt(new Date()); }
+  function summarize(value, limit) {
+    var clean = String(value || '').replace(/\s+/g, ' ').trim();
+    limit = limit || 70;
+    return clean.length > limit ? clean.slice(0, limit).trim() + '…' : clean;
+  }
 
   function serverConfigured() {
     return !!(db.settings.serverUrl || (I.sameOriginServer && I.sameOriginServer()));
@@ -296,6 +301,10 @@
     $('#detail-law-document-save').addEventListener('click', saveLawDocumentContent);
     $('#detail-law-document-new').addEventListener('click', newLawDocumentForm);
     $('#detail-law-review-run').addEventListener('click', runLawReview);
+    $('#law-requirement-close').addEventListener('click', function () {
+      var dialog = $('#law-requirement-dialog');
+      if (dialog.close) dialog.close(); else dialog.removeAttribute('open');
+    });
     $('#eq-manual-file').addEventListener('change', function () {
       selectedRegistrationManualFile = this.files && this.files[0] || null;
       $('#eq-manual-file-button').textContent = selectedRegistrationManualFile ? '다시 선택' : '파일 선택';
@@ -944,12 +953,25 @@
 
     var list = St.forEquipment(db.lawReviews, e.id).sort(function (a, b) { return a.checkedAt < b.checkedAt ? 1 : -1; });
     $('#detail-laws tbody').innerHTML = list.length ? list.map(function (r) {
+      var requirement = r.requirement || '';
       return '<tr><td><button class="btn small-btn" data-law-del="' + esc(r.id) + '">삭제</button></td>'
-        + '<td>' + esc(r.law) + '</td><td>' + esc(r.requirement || '') + '</td><td>' + esc(r.reviewResult || r.note || '') + '</td>'
+        + '<td>' + esc(r.law) + '</td><td><span class="law-summary">' + esc(summarize(requirement, 72)) + '</span>'
+        + (requirement ? '<button class="btn small-btn law-full-button" data-law-full="' + esc(r.id) + '">전체 글보기</button>' : '')
+        + '</td><td class="review-result-cell">' + esc(r.reviewResult || r.note || '') + '</td>'
         + '<td class="mono">' + esc(r.checkedAt) + '</td><td>' + esc(r.reviewer) + '</td>'
         + '<td>' + (r.needsReview ? '<b style="color:var(--warn)">필요</b>' : '완료') + '</td>'
-        + '<td>' + esc(r.filePath) + '</td></tr>';
+        + '<td class="review-path" title="' + esc(r.filePath) + '">' + esc(r.filePath) + '</td></tr>';
     }).join('') : '<tr><td colspan="8" class="sub">저장된 법령 검토 기록이 없습니다.</td></tr>';
+    $$('#detail-laws [data-law-full]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var record = list.find(function (r) { return r.id === b.getAttribute('data-law-full'); });
+        if (!record) return;
+        $('#law-requirement-title').textContent = (record.law || '법령') + ' 요구사항';
+        $('#law-requirement-full').textContent = record.requirement || '저장된 요구사항이 없습니다.';
+        var dialog = $('#law-requirement-dialog');
+        if (dialog.showModal) dialog.showModal(); else dialog.setAttribute('open', '');
+      });
+    });
     $$('#detail-laws [data-law-del]').forEach(function (b) {
       b.addEventListener('click', function () {
         db.lawReviews = db.lawReviews.filter(function (x) { return x.id !== b.getAttribute('data-law-del'); });

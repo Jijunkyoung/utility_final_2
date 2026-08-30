@@ -231,6 +231,14 @@ function serve(port) {
     await page.click('#detail-law-save');
     ok((await page.textContent('#detail-laws')).indexOf('현장 설비 사양과 원문을 대조함') >= 0,
        '자동 입력된 요구사항과 검토결과를 설비별로 저장한다');
+    ok((await page.textContent('#detail-laws .law-summary')).length < 90
+       && await page.locator('#detail-laws [data-law-full]').count() > 0,
+       '저장 목록은 요구사항을 짧게 요약하고 전체 글보기 버튼을 제공한다');
+    await page.locator('#detail-laws [data-law-full]').first().click();
+    ok(await page.isVisible('#law-requirement-dialog')
+       && (await page.textContent('#law-requirement-full')).indexOf('제12조 제3항') >= 0,
+       '전체 글보기 팝업에서 잘리지 않은 법령 요구사항을 확인한다');
+    await page.click('#law-requirement-close');
     await page.click('#detail-close');
 
     await page.reload({ waitUntil: 'networkidle' });

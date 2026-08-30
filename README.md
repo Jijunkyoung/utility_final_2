@@ -136,7 +136,7 @@ node ../hd-04/scripts/probe.mjs /hd-project15/ /hd-project15/energy.html …
 ```sh
 node test/logic.test.js     # 날짜·법령·매뉴얼·공용 저장·에너지 규칙 검사 (102개)
 python3 test/server.test.py # 공유 DB 충돌·백업·토큰·출처·경로 안전성 검사 (7개)
-node test/smoke.browser.js  # 아홉 화면과 담당자·법령·동기화 흐름을 실제로 띄운다 (61개)
+node test/smoke.browser.js  # 아홉 화면과 담당자·법령·동기화 흐름을 실제로 띄운다 (63개)
 python3 build.py            # 페이지 아홉 개를 다시 굽는다
 ```
 

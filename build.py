@@ -317,6 +317,13 @@ PAGES["equipment.html"] = """
 	    <div class="tablewrap detail-table"><table id="detail-laws"><thead><tr><th></th><th>법령명</th><th>법령 요구사항</th><th>검토결과</th><th>확인일</th><th>확인자</th><th>재검토</th><th>파일경로</th></tr></thead><tbody></tbody></table></div>
 	  </section>
 	</dialog>
+	<dialog id="law-requirement-dialog" class="register-dialog law-text-dialog">
+	  <div class="register-head">
+	    <div><p class="eyebrow">저장된 검토기록</p><h2 id="law-requirement-title">법령 요구사항 전체 글</h2></div>
+	    <button class="btn" id="law-requirement-close" type="button">닫기</button>
+	  </div>
+	  <div class="law-text-body"><p id="law-requirement-full"></p></div>
+	</dialog>
 	"""
 
 # ─────────────────────────────────────────────────────────── 알림
