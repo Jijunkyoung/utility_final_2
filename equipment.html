@@ -179,9 +179,11 @@
 	    <div class="btnrow">
 	      <button class="btn primary" id="detail-law-document-save" type="button">연관법령 추가·저장</button>
 	      <button class="btn" id="detail-law-document-new" type="button">새 법령 입력</button>
+	      <button class="btn" id="detail-law-monitor" type="button">저장 법령 최신본 확인</button>
 	      <button class="btn green" id="detail-law-review-run" type="button">저장 법령 비교 검토</button>
 	    </div>
 	    <div id="detail-law-document-status"></div>
+	    <div id="detail-law-changes"></div>
 	    <div id="detail-law-comparison"></div>
 	    <h3 class="detail-subtitle">검토 기록 추가</h3>
 	    <p class="sub">위 비교표에서 「검토기록에 반영」을 누르면 법령명과 요구사항이 자동으로 채워집니다. 검토자는 검토결과만 입력하면 됩니다.</p>
@@ -197,6 +199,13 @@
 	    <div class="btnrow"><button class="btn primary" id="detail-law-save" type="button">검토 기록 저장</button></div>
 	    <div class="tablewrap detail-table"><table id="detail-laws"><thead><tr><th></th><th>법령명</th><th>법령 요구사항</th><th>검토결과</th><th>확인일</th><th>확인자</th><th>재검토</th><th>파일경로</th></tr></thead><tbody></tbody></table></div>
 	  </section>
+	</dialog>
+	<dialog id="law-change-dialog" class="register-dialog law-text-dialog">
+	  <div class="register-head">
+	    <div><p class="eyebrow">법령 개정 비교</p><h2 id="law-change-title">변경 내용 전체 보기</h2></div>
+	    <button class="btn" id="law-change-close" type="button">닫기</button>
+	  </div>
+	  <div class="law-text-body" id="law-change-full"></div>
 	</dialog>
 	<dialog id="law-requirement-dialog" class="register-dialog law-text-dialog">
 	  <div class="register-head">

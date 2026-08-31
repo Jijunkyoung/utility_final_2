@@ -18,6 +18,41 @@
       .map(compact).filter(function (s) { return s.length >= 8; });
   }
 
+  function lawDiff(previousValue, currentValue) {
+    var before = lines(previousValue), after = lines(currentValue);
+    var beforeSet = {}, afterSet = {};
+    before.forEach(function (s) { beforeSet[s] = true; });
+    after.forEach(function (s) { afterSet[s] = true; });
+    var removed = before.filter(function (s) { return !afterSet[s]; });
+    var added = after.filter(function (s) { return !beforeSet[s]; });
+    var changed = added.length > 0 || removed.length > 0;
+    return {
+      changed: changed,
+      added: added.slice(0, 100),
+      removed: removed.slice(0, 100),
+      summary: changed
+        ? '추가 ' + added.length + '개 · 삭제/변경 전 ' + removed.length + '개 문장을 확인했습니다.'
+        : '문장 단위 변경이 없습니다.'
+    };
+  }
+
+  function missingLawSpecs(equipment, content) {
+    var e = equipment || {}, source = text(content), checks = [
+      { label: '용량', keys: ['capacity'], pattern: /용량|출력|톤|kW|MW|RT/i },
+      { label: '유량', keys: ['flow'], pattern: /유량|m³\/h|m3\/h|Nm³\/h|Nm3\/h/i },
+      { label: '압력', keys: ['pressure'], pattern: /압력|MPa|kPa/i },
+      { label: '소모전력', keys: ['power'], pattern: /소모전력|소비전력|정격전력/i },
+      { label: '냉난방능력', keys: ['hvac'], pattern: /냉방능력|난방능력|냉난방능력|냉동능력/i },
+      { label: '법정선임관리자', keys: ['legalManagerId', 'legalMgr'], pattern: /법정선임|선임.*관리자|관리자.*선임/ },
+      { label: '검사주기', keys: ['cycleMonths'], pattern: /검사주기|정기검사|매\s*\d+\s*(?:개월|년)/ }
+    ];
+    return checks.filter(function (check) {
+      return check.pattern.test(source) && !check.keys.some(function (key) {
+        return e[key] !== null && e[key] !== undefined && String(e[key]).trim() !== '';
+      });
+    }).map(function (check) { return check.label; });
+  }
+
   function cycleOf(sentence) {
     var m = /(\d[\d,]*(?:\.\d+)?)\s*(시간|일|주|개월|달|년)\s*(?:마다|주기|이내|후)?/.exec(sentence);
     if (!m) return { cycleText: '', cycleMonths: null };
@@ -174,6 +209,7 @@
     return out;
   }
 
-  return { manual: manual, law: law, enrichLawRows: enrichLawRows,
+  return { manual: manual, law: law, lawDiff: lawDiff, missingLawSpecs: missingLawSpecs,
+    enrichLawRows: enrichLawRows,
     prompt: prompt, normalizeAi: normalizeAi, cycleOf: cycleOf };
 });
