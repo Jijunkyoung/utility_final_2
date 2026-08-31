@@ -12,7 +12,7 @@
   'use strict';
 
   var KEY = 'hd-facility-v1';
-  var SCHEMA_VERSION = 6;
+  var SCHEMA_VERSION = 7;
   var SHARED_KEYS = ['equipments', 'history', 'consumables', 'manuals', 'lawReviews',
     'lawDocuments', 'lawVersions', 'lawChanges', 'analysisResults', 'energy', 'buildings',
     'managers', 'notificationQueue'];
@@ -38,7 +38,10 @@
       sharedPath: '', serverUrl: '', serverToken: '', syncActor: '', deviceName: '', aiMode: 'rules',
       localAiUrl: 'http://127.0.0.1:11434', localAiModel: '',
       externalAiUrl: '', externalAiModel: '', allowExternalFallback: false,
-      lawApiUrl: 'https://www.law.go.kr/DRF', lawApiOc: ''
+      lawApiUrl: 'https://www.law.go.kr/DRF', lawApiOc: '',
+      ocrApiUrl: 'https://api.upstage.ai/v1/document-digitization',
+      inspectionLeadDays: 30, replacementLeadDays: 30, lawCheckEveryDays: 7,
+      costInflation: 3, costContingency: 5, mapImageData: ''
     },
     sync: { revision: 0, updatedAt: null, updatedBy: '', deviceName: '', conflict: false,
       enabled: false, serverEmpty: false },

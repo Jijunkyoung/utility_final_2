@@ -429,6 +429,10 @@ PAGES["cost.html"] = """
   <div class="btnrow" style="margin-top:0">
     <label style="display:flex;align-items:center;gap:8px">기준 연도
       <input type="number" id="year" min="2000" max="2100" style="width:110px;min-height:38px"></label>
+    <label style="display:flex;align-items:center;gap:8px">물가상승률
+      <input type="number" id="cost-inflation" min="0" max="100" step="0.1" style="width:85px;min-height:38px">%</label>
+    <label style="display:flex;align-items:center;gap:8px">예비비
+      <input type="number" id="cost-contingency" min="0" max="100" step="0.1" style="width:85px;min-height:38px">%</label>
     <button class="btn primary" id="calc">계산</button>
     <button class="btn" id="cost-xlsx">엑셀로 내보내기</button>
   </div>
@@ -438,10 +442,11 @@ PAGES["cost.html"] = """
 </div>
 
 <div class="stats" id="cost-stats"></div>
+<div id="cost-groups" class="stats"></div>
 
 <h2>항목별</h2>
 <div class="tablewrap"><table id="cost-table">
-  <thead><tr><th>항목</th><th>구분</th><th>횟수</th><th>단가</th><th>합계</th></tr></thead>
+  <thead><tr><th>항목</th><th>구분</th><th>횟수</th><th>현재 단가</th><th>물가 반영 단가</th><th>합계</th></tr></thead>
   <tbody></tbody></table></div>
 
 <h2>셀 수 없었던 것</h2>
@@ -459,6 +464,7 @@ PAGES["energy.html"] = """
   <input type="file" id="file" accept=".pdf,.csv,.xlsx,.xls" multiple>
   <ul class="filelist" id="files"></ul>
   <div id="read-note"></div>
+  <p class="sub">스캔 이미지 PDF에서 글자가 추출되지 않으면, 사내 서버에 설정된 OCR API로 한 번 더 읽습니다. 외부 OCR 사용 전 회사 보안 승인을 확인하세요.</p>
   <div class="btnrow">
     <button class="btn" id="paste-toggle" type="button" aria-controls="paste-panel" aria-expanded="false">글로 붙여넣기</button>
     <button class="btn" id="energy-xlsx" disabled>엑셀로 내보내기</button>
@@ -489,7 +495,21 @@ PAGES["map.html"] = """
 	  <h3 style="font-size:16px;margin-bottom:6px">건물 배치</h3>
 	  <p class="sub">건물을 누르면 그 건물의 설비가 아래에 나옵니다.
 	     건물은 설비에 적은 <b>건물</b> 값과 분리된 건물 ID·좌표로 배치됩니다.</p>
+  <div class="btnrow">
+    <label class="btn file-button" for="campus-image">조감도 이미지 선택</label>
+    <input id="campus-image" type="file" accept="image/png,image/jpeg,image/webp">
+    <button class="btn" id="campus-image-clear" type="button">배경 이미지 제거</button>
+  </div>
+  <p class="sub">배경 이미지는 보안상 이 PC 브라우저에만 저장되고 외부로 전송되지 않습니다. 아래 좌표는 공용 데이터로 저장됩니다.</p>
   <div id="campus"></div>
+</div>
+
+<div class="card">
+  <h2>건물 좌표 편집</h2>
+  <p class="sub">조감도에 맞춰 왼쪽·위·너비·높이를 백분율로 조정한 뒤 저장하세요.</p>
+  <div class="tablewrap"><table id="building-editor"><thead><tr><th>건물</th><th>왼쪽(%)</th><th>위(%)</th><th>너비(%)</th><th>높이(%)</th></tr></thead><tbody></tbody></table></div>
+  <div class="btnrow"><button class="btn primary" id="building-save" type="button">좌표 저장</button></div>
+  <div id="building-status"></div>
 </div>
 
 <h2 id="picked-title">건물을 고르세요</h2>
@@ -499,9 +519,8 @@ PAGES["map.html"] = """
   <tbody></tbody></table></div>
 
 	<div class="note">
-	  <b>실제 조감도 그림을 쓰려면</b> 이미지를 <code>img/campus.png</code> 로 넣고
-	  <code>buildings</code>의 백분율 좌표를 그림에 맞추면 됩니다. 지금은 같은 좌표 구조에
-	  네모를 배치합니다 — 그림 없이도 어느 건물에 무엇이 있는지는 바로 보입니다.
+	  <b>실제 조감도 그림을 선택한 뒤</b> 위 좌표 편집표에서 건물 영역을 맞추세요.
+	  이미지가 없어도 좌표 네모와 건물별 설비 조회는 그대로 사용할 수 있습니다.
 	</div>
 """
 
@@ -518,6 +537,7 @@ PAGES["settings.html"] = """
       <label>작업자 이름 <input name="syncActor" placeholder="예: 지준경"></label>
       <label>PC 이름 <input name="deviceName" placeholder="예: 유틸리티실-PC01"></label>
     </form>
+    <p class="sub">관리자·편집자·읽기 전용 토큰은 사내 서버 설정 파일에서 분리할 수 있습니다. 화면에서는 토큰 값을 조회하거나 변경할 수 없습니다.</p>
     <div class="btnrow">
       <button class="btn primary" id="storage-save" type="button">이 경로로 설정</button>
       <button class="btn" id="server-test" type="button">서버 연결 시험</button>
@@ -536,8 +556,28 @@ PAGES["settings.html"] = """
       <button class="btn" id="sync-backup" type="button">공용 DB 지금 백업</button>
     </div>
     <div id="sync-status"></div>
+    <h3 class="detail-subtitle">백업 복원</h3>
+    <p class="sub">복원 직전 현재 DB를 안전 백업한 뒤 선택한 백업본으로 되돌립니다.</p>
+    <div class="btnrow"><button class="btn" id="backup-refresh" type="button">백업 목록 새로고침</button>
+      <select id="backup-select"><option value="">— 백업 선택 —</option></select>
+      <button class="btn" id="backup-restore" type="button">선택 백업 복원</button></div>
+    <div id="backup-status"></div>
     <h3 class="detail-subtitle">최근 변경 기록</h3>
     <div class="tablewrap"><table id="sync-audit"><thead><tr><th>버전</th><th>작업자</th><th>PC</th><th>시각</th></tr></thead><tbody></tbody></table></div>
+  </section>
+
+  <section class="card">
+    <h2>자동 점검</h2>
+    <p class="sub">Windows 작업 스케줄러가 <code>server/run_jobs.bat</code>를 매일 실행하면 브라우저를 켜지 않아도 승인 대기함을 갱신합니다.</p>
+    <form id="job-settings" class="grid-form settings-form">
+      <label>법정검사 알림 전(일) <input name="inspectionLeadDays" type="number" min="1" max="365"></label>
+      <label>소모품 알림 전(일) <input name="replacementLeadDays" type="number" min="1" max="365"></label>
+      <label>법령 확인 주기(일) <input name="lawCheckEveryDays" type="number" min="1" max="365"></label>
+    </form>
+    <div class="btnrow"><button class="btn primary" id="job-run" type="button">지금 자동 점검 실행</button>
+      <button class="btn" id="job-run-laws" type="button">법령 포함 강제 점검</button></div>
+    <div id="job-status"></div>
+    <div class="tablewrap"><table id="job-runs"><thead><tr><th>상태</th><th>알림 추가</th><th>법령 확인</th><th>변경</th><th>완료 시각</th></tr></thead><tbody></tbody></table></div>
   </section>
 
   <section class="card">
@@ -553,6 +593,16 @@ PAGES["settings.html"] = """
       <label class="check-label"><input name="allowExternalFallback" type="checkbox"> 로컬 AI 실패 시 외부 전송 허용</label>
     </form>
     <div class="security-note">외부 전송 허용 전 회사 보안정책을 확인하세요. API 키와 원문은 GitHub나 브라우저 저장소에 기록하지 않습니다.</div>
+  </section>
+
+  <section class="card">
+    <h2>스캔 PDF OCR</h2>
+    <p class="sub">PDF에서 글자가 나오지 않을 때만 사내 서버가 승인된 OCR API를 호출합니다.</p>
+    <form id="ocr-settings" class="grid-form settings-form">
+      <label>OCR API 주소 <input name="ocrApiUrl" placeholder="https://api.upstage.ai/v1/document-digitization"></label>
+      <label>OCR API 키 <input name="ocrApiKey" type="password" autocomplete="new-password" placeholder="서버에만 저장"></label>
+    </form>
+    <div class="security-note">키와 원문은 GitHub·공용 DB·브라우저 저장소에 기록하지 않습니다. 외부 전송이 금지된 환경에서는 설정하지 마세요.</div>
   </section>
 
   <section class="card">

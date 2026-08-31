@@ -11,10 +11,17 @@
   "lawApiOc": "",
   "allowedOrigins": [],
   "apiToken": "회사에서 정한 충분히 긴 임의 문자열",
+  "editorTokens": ["편집 담당자별 충분히 긴 토큰"],
+  "viewerTokens": ["조회 전용 사용자별 충분히 긴 토큰"],
   "smtpHost": "smtp.company.local",
   "smtpPort": 587,
   "smtpUser": "facility-notice@company.com",
   "smtpPassword": "GitHub나 브라우저가 아닌 이 파일에만 입력",
   "smtpFrom": "facility-notice@company.com",
-  "smtpStartTls": true
+  "smtpStartTls": true,
+  "ocrApiUrl": "https://api.upstage.ai/v1/document-digitization",
+  "ocrApiKey": "승인된 환경에서만 이 파일에 입력",
+  "inspectionLeadDays": 30,
+  "replacementLeadDays": 30,
+  "lawCheckEveryDays": 7
 }

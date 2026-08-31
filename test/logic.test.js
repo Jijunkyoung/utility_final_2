@@ -184,13 +184,13 @@ const recheck = L.needsReview([
 ]);
 ok(/재검토/.test(recheck[0].reasons.join()), '재검토 필요 표시를 확인 필요 목록에 반영한다');
 
-/* ── ⑤ 저장 자료 v1 → v6 하위호환·공용 자료 분리 ────────────────── */
+/* ── ⑤ 저장 자료 v1 → v7 하위호환·공용 자료 분리 ────────────────── */
 
 const migrated = St.normalize({
   equipments: [{ id: 'eq1', name: '온수보일러', building: '본관' }],
   history: [], consumables: [], energy: []
 });
-eq(migrated.schemaVersion, 6, '이전 자료를 현재 스키마 버전으로 올린다');
+eq(migrated.schemaVersion, 7, '이전 자료를 현재 스키마 버전으로 올린다');
 ok(Array.isArray(migrated.manuals) && Array.isArray(migrated.lawReviews),
    '  매뉴얼·법령 검토 컬렉션을 빈 배열로 보완한다');
 ok(Array.isArray(migrated.lawDocuments) && Array.isArray(migrated.analysisResults),
@@ -280,7 +280,8 @@ eq(A.missingLawSpecs({ capacity: '1.5 t/h', legalMgr: '' },
   ['법정선임관리자', '검사주기'], '최신 원문에 필요한 설비 사양 중 미입력 항목만 찾는다');
 ok(/JSON/.test(A.prompt('manual', {}, '필터 교체')), 'AI 요청도 JSON 근거 구조를 요구한다');
 ok(typeof I.health === 'function' && typeof I.analyze === 'function'
-   && typeof I.loadState === 'function' && typeof I.saveState === 'function' && typeof I.backup === 'function',
+   && typeof I.loadState === 'function' && typeof I.saveState === 'function' && typeof I.backup === 'function'
+   && typeof I.restore === 'function' && typeof I.runJobs === 'function' && typeof I.ocr === 'function',
    '사내 서버의 공용 DB·백업·공유폴더·AI 연결 함수를 제공한다');
 
 /* ── ⑦ 에너지 사용량 읽기 ────────────────────────────────────────── */

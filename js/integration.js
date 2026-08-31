@@ -37,9 +37,10 @@
   }
 
   function health(settings) { return request(settings, '/api/health'); }
-  function saveSettings(settings, apiKey) {
+  function saveSettings(settings, apiKey, ocrApiKey) {
     var payload = {}; Object.keys(settings || {}).forEach(function (k) { payload[k] = settings[k]; });
     if (apiKey) payload.externalApiKey = apiKey;
+    if (ocrApiKey) payload.ocrApiKey = ocrApiKey;
     delete payload.serverToken;
     return request(settings, '/api/settings', { method: 'POST', headers: jsonHeaders(settings), body: JSON.stringify(payload) });
   }
@@ -79,6 +80,23 @@
   }
   function audit(settings, limit) { return request(settings, '/api/audit?limit=' + encodeURIComponent(limit || 30)); }
   function backup(settings) { return request(settings, '/api/backup', { method: 'POST', headers: jsonHeaders(settings), body: '{}' }, 30000); }
+  function backups(settings) { return request(settings, '/api/backups', {}, 10000); }
+  function restore(settings, name) {
+    return request(settings, '/api/restore', { method: 'POST', headers: jsonHeaders(settings),
+      body: JSON.stringify({ name: name }) }, 30000);
+  }
+  function jobs(settings) { return request(settings, '/api/jobs', {}, 10000); }
+  function runJobs(settings, forceLaws) {
+    return request(settings, '/api/jobs/run', { method: 'POST', headers: jsonHeaders(settings),
+      body: JSON.stringify({ forceLaws: !!forceLaws }) }, 180000);
+  }
+  function ocr(settings, file) {
+    return file.arrayBuffer().then(function (buf) {
+      return request(settings, '/api/ocr?filename=' + encodeURIComponent(file.name), {
+        method: 'POST', headers: authHeaders(settings, { 'Content-Type': file.type || 'application/pdf' }), body: buf
+      }, 180000);
+    });
+  }
   function sendNotification(settings, notification) {
     return request(settings, '/api/notifications/send', { method: 'POST', headers: jsonHeaders(settings),
       body: JSON.stringify({ id: notification.id, to: notification.recipientEmail,
@@ -88,6 +106,7 @@
 
   return { health: health, saveSettings: saveSettings, testStorage: testStorage,
     upload: upload, analyze: analyze, saveLaw: saveLaw, importLaw: importLaw, saveAnalysis: saveAnalysis,
-    loadState: loadState, saveState: saveState, audit: audit, backup: backup,
+    loadState: loadState, saveState: saveState, audit: audit, backup: backup, backups: backups,
+    restore: restore, jobs: jobs, runJobs: runJobs, ocr: ocr,
     sendNotification: sendNotification, sameOriginServer: sameOriginServer };
 });

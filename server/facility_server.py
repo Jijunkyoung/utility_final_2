@@ -23,6 +23,8 @@ from urllib.parse import parse_qs, urlparse
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+import jobs as scheduled_jobs
+
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
 CONFIG_PATH = Path(os.environ.get("FACILITY_AI_CONFIG", HERE / "config.local.json"))
@@ -39,12 +41,19 @@ DEFAULTS = {
     "lawApiOc": "",
     "allowedOrigins": [],
     "apiToken": "",
+    "editorTokens": [],
+    "viewerTokens": [],
     "smtpHost": "",
     "smtpPort": 587,
     "smtpUser": "",
     "smtpPassword": "",
     "smtpFrom": "",
     "smtpStartTls": True,
+    "ocrApiUrl": "https://api.upstage.ai/v1/document-digitization",
+    "ocrApiKey": "",
+    "inspectionLeadDays": 30,
+    "replacementLeadDays": 30,
+    "lawCheckEveryDays": 7,
 }
 
 SHARED_KEYS = (
@@ -73,7 +82,7 @@ def save_config(data: dict) -> None:
     for key in DEFAULTS:
         if key in data and data[key] not in (None, ""):
             old[key] = data[key]
-        elif key in data and key not in ("externalApiKey", "smtpPassword"):
+        elif key in data and key not in ("externalApiKey", "smtpPassword", "ocrApiKey"):
             old[key] = data[key]
     CONFIG_PATH.write_text(json.dumps(old, ensure_ascii=False, indent=2), encoding="utf-8")
     try:
@@ -131,6 +140,12 @@ def database(config: dict | None = None) -> sqlite3.Connection:
       CREATE TABLE IF NOT EXISTS notification_mail_log (
         notification_id TEXT PRIMARY KEY, recipient TEXT NOT NULL,
         subject TEXT NOT NULL, approved_by TEXT, sent_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS job_runs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, status TEXT NOT NULL,
+        queued INTEGER NOT NULL DEFAULT 0, law_checked INTEGER NOT NULL DEFAULT 0,
+        law_changed INTEGER NOT NULL DEFAULT 0, errors TEXT,
+        started_at TEXT NOT NULL, finished_at TEXT NOT NULL
       );
     """)
     return conn
@@ -196,6 +211,122 @@ def create_backup() -> Path:
     finally:
         destination.close(); source.close()
     return target
+
+
+def list_backups() -> list[dict]:
+    backup_dir = shared_root() / "backups"
+    if not backup_dir.exists():
+        return []
+    return [{"name": p.name, "size": p.stat().st_size,
+             "modifiedAt": datetime.fromtimestamp(p.stat().st_mtime, timezone.utc).isoformat()}
+            for p in sorted(backup_dir.glob("facility-ai-*.db"), reverse=True) if p.is_file()][:100]
+
+
+def restore_backup(name: str) -> dict:
+    clean = safe_segment(name, "")
+    if not clean or clean != name or not re.fullmatch(r"facility-ai-[0-9-]+\.db", clean):
+        raise ValueError("복원할 백업 파일명을 확인하세요.")
+    source_path = shared_root() / "backups" / clean
+    if not source_path.is_file():
+        raise ValueError("선택한 백업 파일을 찾지 못했습니다.")
+    safety = create_backup()
+    source = sqlite3.connect(source_path)
+    target = sqlite3.connect(shared_root() / "facility-ai.db")
+    try:
+        source.backup(target)
+    finally:
+        target.close(); source.close()
+    return {"ok": True, "restored": clean, "safetyBackup": safety.name}
+
+
+def law_check_due(config: dict, force: bool = False) -> bool:
+    if force:
+        return True
+    days = max(int(config.get("lawCheckEveryDays") or 7), 1)
+    with database(config) as conn:
+        row = conn.execute("SELECT finished_at FROM job_runs WHERE law_checked>0 AND status='완료' ORDER BY id DESC LIMIT 1").fetchone()
+    if not row:
+        return True
+    try:
+        last = datetime.fromisoformat(row["finished_at"])
+        return (datetime.now(timezone.utc) - last.astimezone(timezone.utc)).days >= days
+    except ValueError:
+        return True
+
+
+def run_scheduled_jobs(force_laws: bool = False) -> dict:
+    cfg, started = load_config(), now()
+    with database(cfg) as conn:
+        state = state_snapshot(conn)
+    data = state.get("data")
+    if not data:
+        result = {"ok": True, "status": "자료 없음", "queued": 0, "lawChecked": 0,
+                  "lawChanged": 0, "errors": []}
+    else:
+        due = scheduled_jobs.queue_due_notifications(
+            data, datetime.now().date().isoformat(), int(cfg.get("inspectionLeadDays") or 30),
+            int(cfg.get("replacementLeadDays") or 30))
+        law_checked = law_changed = 0
+        errors = []
+        if cfg.get("lawApiOc") and law_check_due(cfg, force_laws):
+            for doc in list(data.get("lawDocuments", [])):
+                try:
+                    previous = dict(doc)
+                    latest = import_law(cfg, doc)
+                    doc.update(latest); law_checked += 1
+                    if scheduled_jobs.record_law_update(data, previous, doc, "국가법령정보센터 자동 점검"):
+                        law_changed += 1
+                except Exception as exc:
+                    errors.append(str(doc.get("law") or "법령") + ": " + str(exc))
+        changed = due["added"] or law_changed
+        if changed:
+            saved, _ = save_shared_state({"data": data, "baseRevision": state["revision"],
+                                          "actor": "자동 점검", "deviceName": "사내 서버"})
+            if not saved:
+                errors.append("다른 PC가 자료를 수정해 자동 점검 결과 저장을 보류했습니다.")
+        result = {"ok": not errors, "status": "완료" if not errors else "일부 실패",
+                  "queued": due["added"], "missingSchedule": due["missingSchedule"],
+                  "lawChecked": law_checked, "lawChanged": law_changed, "errors": errors}
+    with database(cfg) as conn:
+        conn.execute("INSERT INTO job_runs(status,queued,law_checked,law_changed,errors,started_at,finished_at) VALUES(?,?,?,?,?,?,?)",
+                     (result["status"], result.get("queued", 0), result.get("lawChecked", 0),
+                      result.get("lawChanged", 0), json.dumps(result.get("errors", []), ensure_ascii=False), started, now()))
+    return result
+
+
+def extract_document_text(value) -> str:
+    if isinstance(value, dict):
+        for key in ("text", "content", "html", "markdown"):
+            if isinstance(value.get(key), str) and value[key].strip():
+                return value[key]
+        return "\n".join(filter(None, (extract_document_text(x) for x in value.values())))
+    if isinstance(value, list):
+        return "\n".join(filter(None, (extract_document_text(x) for x in value)))
+    return ""
+
+
+def ocr_document(data: bytes, filename: str, content_type: str, config: dict | None = None) -> dict:
+    cfg = config or load_config()
+    url = str(cfg.get("ocrApiUrl") or "").strip()
+    key = str(cfg.get("ocrApiKey") or "").strip()
+    if not url or not key:
+        raise RuntimeError("OCR API 주소와 키가 필요합니다. 키는 사내 서버 설정 파일에만 저장됩니다.")
+    boundary = "----FacilityAI" + os.urandom(12).hex()
+    chunks = []
+    for field_name, value in (("model", b"ocr"),):
+        chunks.extend([f"--{boundary}\r\nContent-Disposition: form-data; name=\"{field_name}\"\r\n\r\n".encode(), value, b"\r\n"])
+    chunks.extend([f"--{boundary}\r\nContent-Disposition: form-data; name=\"document\"; filename=\"{safe_segment(filename)}\"\r\n".encode(),
+                   f"Content-Type: {content_type or 'application/octet-stream'}\r\n\r\n".encode(), data, b"\r\n",
+                   f"--{boundary}--\r\n".encode()])
+    req = Request(url, data=b"".join(chunks), method="POST", headers={
+        "Authorization": "Bearer " + key, "Content-Type": "multipart/form-data; boundary=" + boundary,
+        "Accept": "application/json", "User-Agent": "FacilityAI/1.0"})
+    with urlopen(req, timeout=120) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    text_value = extract_document_text(payload).strip()
+    if not text_value:
+        raise RuntimeError("OCR 응답에서 글자를 찾지 못했습니다.")
+    return {"ok": True, "text": text_value, "provider": "configured-ocr"}
 
 
 def mail_configured(config: dict | None = None) -> bool:
@@ -387,18 +518,38 @@ class Handler(BaseHTTPRequestHandler):
         allowed = {str(x).rstrip("/") for x in (load_config().get("allowedOrigins") or [])}
         return origin in own or origin in allowed
 
-    def authorized(self) -> bool:
-        token = str(load_config().get("apiToken") or "")
-        if not token:
-            return True
-        return self.headers.get("Authorization") == "Bearer " + token
+    def request_role(self) -> str | None:
+        cfg = load_config()
+        admin = str(cfg.get("apiToken") or "")
+        editors = {str(x) for x in (cfg.get("editorTokens") or []) if str(x)}
+        viewers = {str(x) for x in (cfg.get("viewerTokens") or []) if str(x)}
+        supplied = str(self.headers.get("Authorization") or "")
+        token = supplied[7:] if supplied.startswith("Bearer ") else ""
+        if not admin and not editors and not viewers:
+            return "admin"
+        if token and token == admin:
+            return "admin"
+        if token in editors:
+            return "editor"
+        if token in viewers:
+            return "viewer"
+        return None
 
     def api_guard(self) -> bool:
         if not self.origin_allowed():
             self.send_json(403, {"error": "허용되지 않은 화면 출처입니다."})
             return False
-        if self.path.startswith("/api/") and not self.authorized():
+        if self.path.startswith("/api/") and not self.request_role():
             self.send_json(401, {"error": "사내 서버 접근 토큰을 확인하세요."})
+            return False
+        return True
+
+    def role_guard(self, minimum: str) -> bool:
+        order = {"viewer": 1, "editor": 2, "admin": 3}
+        role = self.request_role()
+        if order.get(role or "", 0) < order[minimum]:
+            self.send_json(403, {"error": "이 작업에는 " + ("관리자" if minimum == "admin" else "편집자") + " 권한이 필요합니다.",
+                                 "role": role})
             return False
         return True
 
@@ -471,12 +622,16 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/health":
             cfg = load_config()
             self.send_json(200, {"ok": True, "service": "Facility AI 사내 서버",
-                                 "sharedPath": str(shared_root(cfg)), "mailConfigured": mail_configured(cfg), "time": now()})
+                                 "sharedPath": str(shared_root(cfg)), "mailConfigured": mail_configured(cfg),
+                                 "role": self.request_role(), "time": now()})
             return
         if parsed.path == "/api/settings":
-            full = load_config(); cfg = dict(full); cfg.pop("externalApiKey", None); cfg.pop("smtpPassword", None)
+            full = load_config(); cfg = dict(full)
+            for secret in ("externalApiKey", "smtpPassword", "ocrApiKey", "apiToken", "editorTokens", "viewerTokens"):
+                cfg.pop(secret, None)
             self.send_json(200, {"ok": True, "settings": cfg, "hasExternalApiKey": bool(full.get("externalApiKey")),
-                                 "hasSmtpPassword": bool(full.get("smtpPassword")), "mailConfigured": mail_configured(full)})
+                                 "hasSmtpPassword": bool(full.get("smtpPassword")), "hasOcrApiKey": bool(full.get("ocrApiKey")),
+                                 "mailConfigured": mail_configured(full)})
             return
         if parsed.path == "/api/state":
             with database() as conn:
@@ -490,6 +645,16 @@ class Handler(BaseHTTPRequestHandler):
                     "SELECT revision,action,actor,device_name,summary,created_at FROM audit_log ORDER BY id DESC LIMIT ?", (limit,))]
             for row in rows:
                 row["summary"] = json.loads(row["summary"] or "{}")
+            self.send_json(200, {"ok": True, "items": rows})
+            return
+        if parsed.path == "/api/backups":
+            self.send_json(200, {"ok": True, "items": list_backups()})
+            return
+        if parsed.path == "/api/jobs":
+            with database() as conn:
+                rows = [dict(r) for r in conn.execute("SELECT status,queued,law_checked,law_changed,errors,started_at,finished_at FROM job_runs ORDER BY id DESC LIMIT 30")]
+            for row in rows:
+                row["errors"] = json.loads(row["errors"] or "[]")
             self.send_json(200, {"ok": True, "items": rows})
             return
         if parsed.path == "/api/laws":
@@ -507,12 +672,18 @@ class Handler(BaseHTTPRequestHandler):
             return
         try:
             if parsed.path == "/api/settings":
-                payload = self.read_json(); save_config(payload)
+                if not self.role_guard("admin"): return
+                payload = self.read_json()
+                for server_only in ("apiToken", "editorTokens", "viewerTokens"):
+                    payload.pop(server_only, None)
+                save_config(payload)
                 cfg = load_config()
                 self.send_json(200, {"ok": True, "saved": True, "hasExternalApiKey": bool(cfg.get("externalApiKey")),
-                                     "hasSmtpPassword": bool(cfg.get("smtpPassword")), "mailConfigured": mail_configured(cfg)})
+                                     "hasSmtpPassword": bool(cfg.get("smtpPassword")), "hasOcrApiKey": bool(cfg.get("ocrApiKey")),
+                                     "mailConfigured": mail_configured(cfg)})
                 return
             if parsed.path == "/api/settings/test":
+                if not self.role_guard("admin"): return
                 payload = self.read_json(); path = Path(str(payload.get("sharedPath") or "").strip())
                 if not str(path): raise ValueError("공유폴더 경로를 입력하세요.")
                 path.mkdir(parents=True, exist_ok=True)
@@ -521,6 +692,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(200, {"ok": True, "path": str(path)})
                 return
             if parsed.path == "/api/state":
+                if not self.role_guard("editor"): return
                 saved, state = save_shared_state(self.read_json())
                 if not saved:
                     self.send_json(409, {"error": "다른 PC에서 먼저 수정했습니다.", "conflict": True, **state})
@@ -528,13 +700,31 @@ class Handler(BaseHTTPRequestHandler):
                     self.send_json(200, {"ok": True, **state})
                 return
             if parsed.path == "/api/backup":
+                if not self.role_guard("admin"): return
                 target = create_backup()
                 self.send_json(200, {"ok": True, "path": str(target)})
                 return
+            if parsed.path == "/api/restore":
+                if not self.role_guard("admin"): return
+                self.send_json(200, restore_backup(str(self.read_json().get("name") or "")))
+                return
+            if parsed.path == "/api/jobs/run":
+                if not self.role_guard("editor"): return
+                payload = self.read_json()
+                self.send_json(200, run_scheduled_jobs(bool(payload.get("forceLaws"))))
+                return
+            if parsed.path == "/api/ocr":
+                if not self.role_guard("editor"): return
+                q = parse_qs(parsed.query); filename = q.get("filename", ["document.pdf"])[0]
+                self.send_json(200, ocr_document(self.read_body(20 * 1024 * 1024), filename,
+                                                 self.headers.get("Content-Type") or "application/pdf"))
+                return
             if parsed.path == "/api/notifications/send":
+                if not self.role_guard("editor"): return
                 self.send_json(200, send_approved_notification(self.read_json()))
                 return
             if parsed.path == "/api/files":
+                if not self.role_guard("editor"): return
                 q = parse_qs(parsed.query)
                 equipment = safe_segment(q.get("equipmentId", [""])[0], "unknown-equipment")
                 category = safe_segment(q.get("category", [""])[0], "files")
@@ -549,6 +739,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(200, {"ok": True, "path": str(target), "size": len(data)})
                 return
             if parsed.path == "/api/laws":
+                if not self.role_guard("editor"): return
                 doc = self.read_json(); doc_id = safe_segment(doc.get("id"), "law")
                 with database() as conn:
                     conn.execute("""INSERT INTO law_documents(id,equipment_id,law,about,source_url,effective_date,content,payload,updated_at)
@@ -561,6 +752,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(200, {"ok": True, "id": doc_id})
                 return
             if parsed.path == "/api/laws/import":
+                if not self.role_guard("editor"): return
                 doc = import_law(load_config(), self.read_json())
                 doc_id = safe_segment(doc.get("id"), "law")
                 with database() as conn:
@@ -573,11 +765,13 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(200, {"ok": True, "document": doc})
                 return
             if parsed.path == "/api/analyze":
+                if not self.role_guard("editor"): return
                 payload = self.read_json(); cfg = load_config()
                 result, provider = analyze(cfg, payload)
                 self.send_json(200, {"ok": True, "result": result, "provider": provider})
                 return
             if parsed.path == "/api/analyses":
+                if not self.role_guard("editor"): return
                 payload = self.read_json()
                 result = payload.get("result") or {}
                 provider = result.get("provider") or "rules"
