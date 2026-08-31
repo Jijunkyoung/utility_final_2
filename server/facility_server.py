@@ -49,7 +49,8 @@ DEFAULTS = {
 
 SHARED_KEYS = (
     "equipments", "history", "consumables", "manuals", "lawReviews",
-    "lawDocuments", "analysisResults", "energy", "buildings", "managers", "notificationQueue",
+    "lawDocuments", "lawVersions", "lawChanges", "analysisResults", "energy", "buildings",
+    "managers", "notificationQueue",
 )
 
 

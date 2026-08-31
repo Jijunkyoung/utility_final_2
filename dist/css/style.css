@@ -222,6 +222,13 @@ body.register-open{overflow:hidden;}
 .law-document h4{font-size:15px; margin-bottom:5px;}.law-document p{font-size:13px; color:var(--sub); margin-bottom:8px;}
 .analysis-card{margin-top:16px; padding:16px; border:1px solid #b9cbd7; border-radius:10px; background:#f8fbfd;}
 .analysis-card h4{font-size:15px; margin-bottom:7px;}.analysis-card p{font-size:13.5px;}
+.law-change-list{display:grid; gap:10px; margin-top:14px;}
+.law-change-card{padding:14px; border:1px solid #e2b76a; border-radius:10px; background:#fffaf0;}
+.law-change-card.reviewed{border-color:#aacabd; background:#f4fbf7;}
+.law-change-card h4{font-size:15px; margin-bottom:6px;}.law-change-card p{font-size:13px; margin:4px 0;}
+.law-change-sections{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
+.law-change-sections h3{font-size:15px; margin-bottom:8px;}.law-change-sections li{margin-bottom:7px; white-space:pre-wrap;}
+@media(max-width:720px){.law-change-sections{grid-template-columns:1fr;}}
 .proposal-list{display:grid; gap:8px; margin-top:10px;}
 .proposal-item{display:grid; grid-template-columns:minmax(120px,1fr) minmax(90px,.45fr) minmax(0,2fr) auto;
   align-items:center; gap:10px; padding:10px 12px; border:1px solid var(--line); border-radius:8px; background:#fff; font-size:13px;}

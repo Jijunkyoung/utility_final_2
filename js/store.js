@@ -12,9 +12,10 @@
   'use strict';
 
   var KEY = 'hd-facility-v1';
-  var SCHEMA_VERSION = 5;
+  var SCHEMA_VERSION = 6;
   var SHARED_KEYS = ['equipments', 'history', 'consumables', 'manuals', 'lawReviews',
-    'lawDocuments', 'analysisResults', 'energy', 'buildings', 'managers', 'notificationQueue'];
+    'lawDocuments', 'lawVersions', 'lawChanges', 'analysisResults', 'energy', 'buildings',
+    'managers', 'notificationQueue'];
 
   var EMPTY = {
     schemaVersion: SCHEMA_VERSION,
@@ -24,6 +25,8 @@
     manuals: [],      // 설비별 매뉴얼/파일 메타데이터
     lawReviews: [],   // 설비별 법령 검토 기록
     lawDocuments: [], // 설비별로 내부 저장한 법령 원문·버전
+    lawVersions: [],  // 법령 원문을 갱신할 때 보존하는 시점별 사본
+    lawChanges: [],   // 이전·최신 원문 차이와 설비 영향 검토 상태
     analysisResults: [], // 매뉴얼·법령 분석 결과와 근거
     energy: [],       // 에너지 사용량
     buildings: [],    // {id,name,x,y,w,h} — 조감도와 설비를 이름으로 연결
@@ -155,7 +158,8 @@
   function removeEquipment(input, equipmentId) {
     var d = normalize(input);
     d.equipments = d.equipments.filter(function (x) { return x.id !== equipmentId; });
-    ['history', 'consumables', 'manuals', 'lawReviews', 'lawDocuments', 'analysisResults', 'notificationQueue'].forEach(function (key) {
+    ['history', 'consumables', 'manuals', 'lawReviews', 'lawDocuments', 'lawVersions', 'lawChanges',
+      'analysisResults', 'notificationQueue'].forEach(function (key) {
       d[key] = d[key].filter(function (x) { return x.equipmentId !== equipmentId; });
     });
     return d;

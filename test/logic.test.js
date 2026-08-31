@@ -184,19 +184,21 @@ const recheck = L.needsReview([
 ]);
 ok(/재검토/.test(recheck[0].reasons.join()), '재검토 필요 표시를 확인 필요 목록에 반영한다');
 
-/* ── ⑤ 저장 자료 v1 → v5 하위호환·공용 자료 분리 ────────────────── */
+/* ── ⑤ 저장 자료 v1 → v6 하위호환·공용 자료 분리 ────────────────── */
 
 const migrated = St.normalize({
   equipments: [{ id: 'eq1', name: '온수보일러', building: '본관' }],
   history: [], consumables: [], energy: []
 });
-eq(migrated.schemaVersion, 5, '이전 자료를 현재 스키마 버전으로 올린다');
+eq(migrated.schemaVersion, 6, '이전 자료를 현재 스키마 버전으로 올린다');
 ok(Array.isArray(migrated.manuals) && Array.isArray(migrated.lawReviews),
    '  매뉴얼·법령 검토 컬렉션을 빈 배열로 보완한다');
 ok(Array.isArray(migrated.lawDocuments) && Array.isArray(migrated.analysisResults),
    '  내부 법령 원문·분석 결과 컬렉션을 빈 배열로 보완한다');
 ok(Array.isArray(migrated.managers), '  담당자 통합 대장을 빈 배열로 보완한다');
 ok(Array.isArray(migrated.notificationQueue), '  알림 승인·발송 기록 컬렉션을 빈 배열로 보완한다');
+ok(Array.isArray(migrated.lawVersions) && Array.isArray(migrated.lawChanges),
+   '  법령 원문 버전과 변경 검토 컬렉션을 빈 배열로 보완한다');
 eq(migrated.settings.aiMode, 'rules', '  AI를 설정하기 전에는 규칙 기반으로 안전하게 시작한다');
 eq(migrated.buildings[0].name, '본관', '  설비의 건물명으로 좌표 레코드를 만든다');
 ok(['x', 'y', 'w', 'h'].every(k => Number.isFinite(migrated.buildings[0][k])),
@@ -230,7 +232,8 @@ const removed = St.removeEquipment({
 }, 'eq1');
 eq(removed.equipments.map(x => x.id), ['eq2'], '설비를 삭제한다');
 eq(removed.history.map(x => x.equipmentId), ['eq2'], '  다른 설비 이력은 남긴다');
-ok(['consumables', 'manuals', 'lawReviews', 'lawDocuments', 'analysisResults', 'notificationQueue'].every(k => removed[k].length === 0),
+ok(['consumables', 'manuals', 'lawReviews', 'lawDocuments', 'lawVersions', 'lawChanges',
+    'analysisResults', 'notificationQueue'].every(k => removed[k].length === 0),
    '  연결된 소모품·매뉴얼·법령 원문·분석·알림 기록도 함께 삭제한다');
 
 /* ── ⑥ 매뉴얼·법령 분석 ─────────────────────────────────────────── */
@@ -264,6 +267,17 @@ ok(/1.5 t\/h/.test(detailedLaw.requirementDetail) && /이정민/.test(detailedLa
    '상세 요구사항에 설비의 실제 용량과 법정선임관리자를 함께 비교한다');
 ok(/정량 기준.*확인되지/.test(lawAnalysis.rows[0].requirementDetail),
    '원문에 없는 수치 기준은 지어내지 않고 추가 확인 대상으로 표시한다');
+const amendment = A.lawDiff(
+  '제12조 용량 1.0 t/h 이상이면 관리자를 선임하여야 한다.',
+  '제12조 용량 0.8 t/h 이상이면 관리자를 선임하여야 한다. 정기검사는 매 1년 실시한다.'
+);
+ok(amendment.changed && amendment.added.length === 2 && amendment.removed.length === 1,
+   '법령 최신본의 실제 추가·삭제 문장을 구분한다');
+eq(A.lawDiff('같은 법령 문장입니다.', '같은 법령 문장입니다.').changed, false,
+   '내용이 같으면 개정으로 기록하지 않는다');
+eq(A.missingLawSpecs({ capacity: '1.5 t/h', legalMgr: '' },
+  '용량 기준에 따라 법정선임관리자를 선임하고 정기검사는 매 1년 실시한다.'),
+  ['법정선임관리자', '검사주기'], '최신 원문에 필요한 설비 사양 중 미입력 항목만 찾는다');
 ok(/JSON/.test(A.prompt('manual', {}, '필터 교체')), 'AI 요청도 JSON 근거 구조를 요구한다');
 ok(typeof I.health === 'function' && typeof I.analyze === 'function'
    && typeof I.loadState === 'function' && typeof I.saveState === 'function' && typeof I.backup === 'function',
