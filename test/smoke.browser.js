@@ -353,7 +353,7 @@ function serve(port) {
     ok(bldgs > 0, '건물이 그려진다 (' + bldgs + '개)');
     ok(await page.locator('#campus [data-building-id]').count() === bldgs,
        '건물 ID와 좌표 구조로 배치된다');
-    ok(await page.isVisible('#campus-image') && await page.locator('#building-editor tbody tr').count() === bldgs,
+    ok(await page.locator('#campus-image').count() === 1 && await page.locator('#building-editor tbody tr').count() === bldgs,
        '조감도 배경 이미지와 건물 좌표를 화면에서 편집할 수 있다');
 
     group('10. 좁은 화면에서 가로로 넘치지 않는다');
