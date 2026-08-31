@@ -303,6 +303,9 @@ function serve(port) {
     await page.click('#calc');
     await page.waitForTimeout(300);
     ok((await page.textContent('#cost-stats')).trim().length > 0, '차년도 요약이 나온다');
+    ok(await page.isVisible('#cost-inflation') && await page.isVisible('#cost-contingency')
+       && (await page.textContent('#cost-stats')).indexOf('예비비 포함 최종') >= 0,
+       '물가상승률과 예비비를 반영한 최종 예산을 표시한다');
     var unknown = (await page.textContent('#cost-unknown')).replace(/\s+/g, ' ');
     ok(unknown.length > 0, '「셀 수 없었던 것」 자리가 채워진다', unknown.slice(0, 120));
 
@@ -337,6 +340,12 @@ function serve(port) {
     ok(await page.isVisible('#ai-settings [name="externalApiKey"]')
        && await page.isVisible('#ai-settings [name="localAiUrl"]'),
        '외부 API와 로컬 AI 설정을 모두 제공한다');
+    ok(await page.isVisible('#job-run') && await page.isVisible('#job-run-laws')
+       && await page.isVisible('#backup-restore'),
+       '자동 점검 실행과 백업 복원 기능을 제공한다');
+    ok(await page.isVisible('#ocr-settings [name="ocrApiUrl"]')
+       && await page.isVisible('#ocr-settings [name="ocrApiKey"]'),
+       '스캔 PDF용 서버 OCR 설정을 제공한다');
 
     group('9. 조감도 — 건물을 눌러 그 건물 설비 보기');
     await go('map.html');
@@ -344,6 +353,8 @@ function serve(port) {
     ok(bldgs > 0, '건물이 그려진다 (' + bldgs + '개)');
     ok(await page.locator('#campus [data-building-id]').count() === bldgs,
        '건물 ID와 좌표 구조로 배치된다');
+    ok(await page.isVisible('#campus-image') && await page.locator('#building-editor tbody tr').count() === bldgs,
+       '조감도 배경 이미지와 건물 좌표를 화면에서 편집할 수 있다');
 
     group('10. 좁은 화면에서 가로로 넘치지 않는다');
     await go('');

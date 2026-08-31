@@ -62,6 +62,7 @@
       <label>작업자 이름 <input name="syncActor" placeholder="예: 지준경"></label>
       <label>PC 이름 <input name="deviceName" placeholder="예: 유틸리티실-PC01"></label>
     </form>
+    <p class="sub">관리자·편집자·읽기 전용 토큰은 사내 서버 설정 파일에서 분리할 수 있습니다. 화면에서는 토큰 값을 조회하거나 변경할 수 없습니다.</p>
     <div class="btnrow">
       <button class="btn primary" id="storage-save" type="button">이 경로로 설정</button>
       <button class="btn" id="server-test" type="button">서버 연결 시험</button>
@@ -80,8 +81,28 @@
       <button class="btn" id="sync-backup" type="button">공용 DB 지금 백업</button>
     </div>
     <div id="sync-status"></div>
+    <h3 class="detail-subtitle">백업 복원</h3>
+    <p class="sub">복원 직전 현재 DB를 안전 백업한 뒤 선택한 백업본으로 되돌립니다.</p>
+    <div class="btnrow"><button class="btn" id="backup-refresh" type="button">백업 목록 새로고침</button>
+      <select id="backup-select"><option value="">— 백업 선택 —</option></select>
+      <button class="btn" id="backup-restore" type="button">선택 백업 복원</button></div>
+    <div id="backup-status"></div>
     <h3 class="detail-subtitle">최근 변경 기록</h3>
     <div class="tablewrap"><table id="sync-audit"><thead><tr><th>버전</th><th>작업자</th><th>PC</th><th>시각</th></tr></thead><tbody></tbody></table></div>
+  </section>
+
+  <section class="card">
+    <h2>자동 점검</h2>
+    <p class="sub">Windows 작업 스케줄러가 <code>server/run_jobs.bat</code>를 매일 실행하면 브라우저를 켜지 않아도 승인 대기함을 갱신합니다.</p>
+    <form id="job-settings" class="grid-form settings-form">
+      <label>법정검사 알림 전(일) <input name="inspectionLeadDays" type="number" min="1" max="365"></label>
+      <label>소모품 알림 전(일) <input name="replacementLeadDays" type="number" min="1" max="365"></label>
+      <label>법령 확인 주기(일) <input name="lawCheckEveryDays" type="number" min="1" max="365"></label>
+    </form>
+    <div class="btnrow"><button class="btn primary" id="job-run" type="button">지금 자동 점검 실행</button>
+      <button class="btn" id="job-run-laws" type="button">법령 포함 강제 점검</button></div>
+    <div id="job-status"></div>
+    <div class="tablewrap"><table id="job-runs"><thead><tr><th>상태</th><th>알림 추가</th><th>법령 확인</th><th>변경</th><th>완료 시각</th></tr></thead><tbody></tbody></table></div>
   </section>
 
   <section class="card">
@@ -97,6 +118,16 @@
       <label class="check-label"><input name="allowExternalFallback" type="checkbox"> 로컬 AI 실패 시 외부 전송 허용</label>
     </form>
     <div class="security-note">외부 전송 허용 전 회사 보안정책을 확인하세요. API 키와 원문은 GitHub나 브라우저 저장소에 기록하지 않습니다.</div>
+  </section>
+
+  <section class="card">
+    <h2>스캔 PDF OCR</h2>
+    <p class="sub">PDF에서 글자가 나오지 않을 때만 사내 서버가 승인된 OCR API를 호출합니다.</p>
+    <form id="ocr-settings" class="grid-form settings-form">
+      <label>OCR API 주소 <input name="ocrApiUrl" placeholder="https://api.upstage.ai/v1/document-digitization"></label>
+      <label>OCR API 키 <input name="ocrApiKey" type="password" autocomplete="new-password" placeholder="서버에만 저장"></label>
+    </form>
+    <div class="security-note">키와 원문은 GitHub·공용 DB·브라우저 저장소에 기록하지 않습니다. 외부 전송이 금지된 환경에서는 설정하지 마세요.</div>
   </section>
 
   <section class="card">

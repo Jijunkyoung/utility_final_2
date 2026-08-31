@@ -55,7 +55,21 @@
 	  <h3 style="font-size:16px;margin-bottom:6px">건물 배치</h3>
 	  <p class="sub">건물을 누르면 그 건물의 설비가 아래에 나옵니다.
 	     건물은 설비에 적은 <b>건물</b> 값과 분리된 건물 ID·좌표로 배치됩니다.</p>
+  <div class="btnrow">
+    <label class="btn file-button" for="campus-image">조감도 이미지 선택</label>
+    <input id="campus-image" type="file" accept="image/png,image/jpeg,image/webp">
+    <button class="btn" id="campus-image-clear" type="button">배경 이미지 제거</button>
+  </div>
+  <p class="sub">배경 이미지는 보안상 이 PC 브라우저에만 저장되고 외부로 전송되지 않습니다. 아래 좌표는 공용 데이터로 저장됩니다.</p>
   <div id="campus"></div>
+</div>
+
+<div class="card">
+  <h2>건물 좌표 편집</h2>
+  <p class="sub">조감도에 맞춰 왼쪽·위·너비·높이를 백분율로 조정한 뒤 저장하세요.</p>
+  <div class="tablewrap"><table id="building-editor"><thead><tr><th>건물</th><th>왼쪽(%)</th><th>위(%)</th><th>너비(%)</th><th>높이(%)</th></tr></thead><tbody></tbody></table></div>
+  <div class="btnrow"><button class="btn primary" id="building-save" type="button">좌표 저장</button></div>
+  <div id="building-status"></div>
 </div>
 
 <h2 id="picked-title">건물을 고르세요</h2>
@@ -65,9 +79,8 @@
   <tbody></tbody></table></div>
 
 	<div class="note">
-	  <b>실제 조감도 그림을 쓰려면</b> 이미지를 <code>img/campus.png</code> 로 넣고
-	  <code>buildings</code>의 백분율 좌표를 그림에 맞추면 됩니다. 지금은 같은 좌표 구조에
-	  네모를 배치합니다 — 그림 없이도 어느 건물에 무엇이 있는지는 바로 보입니다.
+	  <b>실제 조감도 그림을 선택한 뒤</b> 위 좌표 편집표에서 건물 영역을 맞추세요.
+	  이미지가 없어도 좌표 네모와 건물별 설비 조회는 그대로 사용할 수 있습니다.
 	</div>
 </div></main>
 

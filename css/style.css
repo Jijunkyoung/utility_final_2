@@ -280,5 +280,8 @@ body.detail-open{overflow:hidden;}
 .bldg.on b,.bldg.on span{color:#fff;}
 .campus-layout{position:relative; min-height:420px; overflow:hidden; border-radius:12px;
   border:1px solid var(--line); background:linear-gradient(145deg,#eaf1f5,#f8fbfd);}
+.campus-layout.has-image{background-size:cover; background-position:center; background-repeat:no-repeat;}
+.campus-layout.has-image .bldg{background:rgba(255,255,255,.88); backdrop-filter:blur(2px); box-shadow:0 2px 10px rgba(0,0,0,.12);}
+.campus-layout.has-image .bldg.on{background:rgba(6,74,112,.92);}
 .campus-layout .bldg{position:absolute; min-height:0;}
 @media (max-width:640px){.campus-layout{min-height:520px;}}

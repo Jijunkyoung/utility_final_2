@@ -1548,6 +1548,8 @@
 
   function initCost() {
     $('#year').value = new Date().getFullYear() + 1;
+    $('#cost-inflation').value = db.settings.costInflation == null ? 3 : db.settings.costInflation;
+    $('#cost-contingency').value = db.settings.costContingency == null ? 5 : db.settings.costContingency;
     $('#calc').addEventListener('click', renderCost);
     $('#cost-xlsx').addEventListener('click', exportCostXlsx);
     renderCost();
@@ -1571,20 +1573,39 @@
   function renderCost() {
     var y = Number($('#year').value) || (new Date().getFullYear() + 1);
     var f = S.forecastYear(costItems(), y);
+    var inflation = Math.max(Number($('#cost-inflation').value) || 0, 0);
+    var contingencyRate = Math.max(Number($('#cost-contingency').value) || 0, 0);
+    db.settings.costInflation = inflation; db.settings.costContingency = contingencyRate; cacheDb();
+    f.lines.forEach(function (l) {
+      l.adjustedUnit = Math.round(l.unit * (1 + inflation / 100));
+      l.adjustedSum = l.adjustedUnit * l.count;
+    });
+    f.adjustedTotal = f.lines.reduce(function (sum, l) { return sum + l.adjustedSum; }, 0);
+    f.contingency = Math.round(f.adjustedTotal * contingencyRate / 100);
+    f.grandTotal = f.adjustedTotal + f.contingency;
+    f.inflation = inflation; f.contingencyRate = contingencyRate;
     lastForecast = f;
 
     $('#cost-stats').innerHTML =
-        '<div class="stat">' + y + '년 예상<b>' + won(f.total) + '</b></div>'
+        '<div class="stat">현재 단가 기준<b>' + won(f.total) + '</b></div>'
+      + '<div class="stat">물가 반영<b>' + won(f.adjustedTotal) + '</b></div>'
+      + '<div class="stat">예비비 포함 최종<b>' + won(f.grandTotal) + '</b></div>'
       + '<div class="stat">항목<b>' + f.lines.length + '건</b></div>'
       + '<div class="stat">셀 수 없음<b' + (f.unknown.length ? ' style="color:var(--warn)"' : '') + '>'
         + f.unknown.length + '건</b></div>';
 
+    var groups = {};
+    f.lines.forEach(function (l) { groups[l.kind || '기타'] = (groups[l.kind || '기타'] || 0) + l.adjustedSum; });
+    $('#cost-groups').innerHTML = Object.keys(groups).map(function (kind) {
+      return '<div class="stat">' + esc(kind) + '<b>' + won(groups[kind]) + '</b></div>';
+    }).join('');
     $('#cost-table tbody').innerHTML = f.lines.length ? f.lines.map(function (l) {
       return '<tr><td>' + esc(l.name) + '</td><td>' + esc(l.kind) + '</td>'
         + '<td class="num">' + l.count + '회</td>'
         + '<td class="num">' + won(l.unit) + '</td>'
-        + '<td class="num"><b>' + won(l.sum) + '</b></td></tr>';
-    }).join('') : '<tr><td colspan="5" class="sub">' + y + '년에 돌아오는 항목이 없습니다.</td></tr>';
+        + '<td class="num">' + won(l.adjustedUnit) + '</td>'
+        + '<td class="num"><b>' + won(l.adjustedSum) + '</b></td></tr>';
+    }).join('') : '<tr><td colspan="6" class="sub">' + y + '년에 돌아오는 항목이 없습니다.</td></tr>';
 
     $('#cost-unknown').innerHTML = f.unknown.length
       ? f.unknown.map(function (u) { return '<li><span>' + esc(u) + '</span></li>'; }).join('')
@@ -1652,9 +1673,16 @@
 
       if (/\.pdf$/i.test(f.name)) {
         readPdf(f).then(function (text) {
-          var g = E.parseUsage(text);
-          ingest(g, f.name);
-          done(g.rows.length ? g.rows.length + '개월' : '읽지 못함');
+          if (String(text || '').replace(/\s/g, '').length >= 30) return { text: text, ocr: false };
+          done('스캔 PDF 감지 · OCR 확인 중…');
+          return I.ocr(db.settings, f).then(function (r) {
+            return { text: r.ok ? r.text : text, ocr: !!r.ok, error: r.error };
+          });
+        }).then(function (read) {
+          var g = E.parseUsage(read.text);
+          if (!g.rows.length && read.error) g.note = 'PDF 글자를 찾지 못했고 OCR도 사용할 수 없습니다: ' + read.error;
+          ingest(g, f.name + (read.ocr ? ' · OCR' : ''));
+          done(g.rows.length ? g.rows.length + '개월' + (read.ocr ? ' · OCR' : '') : '읽지 못함');
         }).catch(function (e) { done('오류: ' + (e && e.message || e)); });
       } else {
         readSheet(f).then(function (text) {
@@ -1817,7 +1845,48 @@
   /* ═══════════════════════════════════════════════════ 조감도 */
 
   function initMap() {
+    $('#campus-image').addEventListener('change', function () {
+      var file = this.files && this.files[0]; if (!file) return;
+      if (file.size > 12 * 1024 * 1024) { alert('이미지는 12MB 이하로 선택하세요.'); return; }
+      var reader = new FileReader();
+      reader.onload = function () {
+        var img = new Image();
+        img.onload = function () {
+          var scale = Math.min(1, 1600 / img.width), canvas = document.createElement('canvas');
+          canvas.width = Math.round(img.width * scale); canvas.height = Math.round(img.height * scale);
+          canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+          db.settings.mapImageData = canvas.toDataURL('image/jpeg', 0.82);
+          cacheDb(); renderCampus();
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file); this.value = '';
+    });
+    $('#campus-image-clear').addEventListener('click', function () {
+      db.settings.mapImageData = ''; cacheDb(); renderCampus();
+    });
+    $('#building-save').addEventListener('click', function () {
+      $$('#building-editor tbody tr').forEach(function (tr) {
+        var b = db.buildings.find(function (x) { return x.id === tr.getAttribute('data-id'); });
+        if (!b) return;
+        ['x', 'y', 'w', 'h'].forEach(function (key) {
+          var value = Number(tr.querySelector('[name=' + key + ']').value);
+          if (Number.isFinite(value)) b[key] = Math.max(0, Math.min(100, value));
+        });
+      });
+      if (persist()) { statusLine('#building-status', true, '건물 좌표를 저장했습니다.'); renderCampus(); }
+    });
     renderCampus();
+    renderBuildingEditor();
+  }
+
+  function renderBuildingEditor() {
+    $('#building-editor tbody').innerHTML = buildingRecords().map(function (b) {
+      return '<tr data-id="' + esc(b.id) + '"><td><b>' + esc(b.name) + '</b></td>'
+        + ['x', 'y', 'w', 'h'].map(function (key) {
+          return '<td><input name="' + key + '" type="number" min="0" max="100" step="0.5" value="' + Number(b[key]) + '" style="width:90px"></td>';
+        }).join('') + '</tr>';
+    }).join('');
   }
 
   function renderCampus() {
@@ -1833,6 +1902,10 @@
         + 'style="left:' + Number(b.x) + '%;top:' + Number(b.y) + '%;width:' + Number(b.w) + '%;height:' + Number(b.h) + '%">'
         + '<b>' + esc(b.name) + '</b><span>' + n + '건</span></button>';
     }).join('') + '</div>';
+    if (db.settings.mapImageData) {
+      $('.campus-layout', box).style.backgroundImage = 'url("' + db.settings.mapImageData + '")';
+      $('.campus-layout', box).classList.add('has-image');
+    }
 
     $$('.bldg').forEach(function (btn) {
       btn.addEventListener('click', function () {
@@ -1861,7 +1934,7 @@
 
   function setFormValues(form, values) {
     $$('[name]', form).forEach(function (i) {
-      if (i.name === 'externalApiKey') return;
+      if (i.name === 'externalApiKey' || i.name === 'ocrApiKey') return;
       if (i.type === 'checkbox') i.checked = !!values[i.name];
       else i.value = values[i.name] == null ? '' : values[i.name];
     });
@@ -1869,8 +1942,8 @@
 
   function settingsFromForms() {
     var out = {};
-    $$('#storage-settings [name], #ai-settings [name], #law-api-settings [name]').forEach(function (i) {
-      if (i.name === 'externalApiKey') return;
+    $$('#storage-settings [name], #ai-settings [name], #law-api-settings [name], #job-settings [name], #ocr-settings [name]').forEach(function (i) {
+      if (i.name === 'externalApiKey' || i.name === 'ocrApiKey') return;
       out[i.name] = i.type === 'checkbox' ? i.checked : i.value.trim();
     });
     return out;
@@ -1901,6 +1974,8 @@
     setFormValues($('#storage-settings'), db.settings);
     setFormValues($('#ai-settings'), db.settings);
     setFormValues($('#law-api-settings'), db.settings);
+    setFormValues($('#job-settings'), db.settings);
+    setFormValues($('#ocr-settings'), db.settings);
 
     $('#storage-save').addEventListener('click', function () {
       Object.assign(db.settings, settingsFromForms()); cacheDb();
@@ -1913,7 +1988,9 @@
       Object.assign(db.settings, settingsFromForms());
       statusLine('#storage-status', true, '사내 서버에 연결을 시험하고 있습니다.');
       I.health(db.settings).then(function (r) {
-        statusLine('#storage-status', r.ok, r.ok ? '사내 서버 연결에 성공했습니다.' : '연결하지 못했습니다: ' + r.error);
+        statusLine('#storage-status', r.ok, r.ok ? '사내 서버 연결에 성공했습니다. 현재 권한: '
+          + ({ admin: '관리자', editor: '편집자', viewer: '읽기 전용' }[r.role] || r.role || '확인 불가')
+          : '연결하지 못했습니다: ' + r.error);
       });
     });
     $('#storage-test').addEventListener('click', function () {
@@ -1927,10 +2004,12 @@
     $('#settings-save').addEventListener('click', function () {
       Object.assign(db.settings, settingsFromForms());
       var apiKey = $('#ai-settings [name=externalApiKey]').value;
+      var ocrApiKey = $('#ocr-settings [name=ocrApiKey]').value;
       cacheDb();
-      I.saveSettings(db.settings, apiKey).then(function (r) {
+      I.saveSettings(db.settings, apiKey, ocrApiKey).then(function (r) {
         if (r.ok) {
           $('#ai-settings [name=externalApiKey]').value = '';
+          $('#ocr-settings [name=ocrApiKey]').value = '';
           statusLine('#settings-status', true, '설정을 사내 서버에 저장했습니다. API 키는 서버에만 보관됩니다.');
         } else {
           statusLine('#settings-status', false, '화면 설정은 이 브라우저에 저장했지만 사내 서버에는 연결하지 못했습니다. API 키는 저장하지 않았습니다.');
@@ -1968,7 +2047,47 @@
         statusLine('#sync-status', r.ok, r.ok ? '백업 완료: ' + r.path : (r.error || '백업하지 못했습니다.'));
       });
     });
-    renderSyncSummary(); loadAudit();
+    function loadBackups() {
+      I.backups(db.settings).then(function (r) {
+        var select = $('#backup-select'), items = r.ok ? r.items || [] : [];
+        select.innerHTML = '<option value="">— 백업 선택 —</option>' + items.map(function (b) {
+          return '<option value="' + esc(b.name) + '">' + esc(b.name) + ' · ' + Math.round(b.size / 1024) + 'KB</option>';
+        }).join('');
+      });
+    }
+    function loadJobs() {
+      I.jobs(db.settings).then(function (r) {
+        var rows = r.ok ? r.items || [] : [];
+        $('#job-runs tbody').innerHTML = rows.length ? rows.map(function (j) {
+          return '<tr><td>' + esc(j.status) + '</td><td>' + esc(j.queued) + '</td><td>' + esc(j.law_checked)
+            + '</td><td>' + esc(j.law_changed) + '</td><td class="mono">' + esc(String(j.finished_at || '').replace('T', ' ').slice(0, 19)) + '</td></tr>';
+        }).join('') : '<tr><td colspan="5" class="sub">자동 점검 실행 기록이 없습니다.</td></tr>';
+      });
+    }
+    $('#backup-refresh').addEventListener('click', loadBackups);
+    $('#backup-restore').addEventListener('click', function () {
+      var name = $('#backup-select').value;
+      if (!name) { alert('복원할 백업을 선택하세요.'); return; }
+      if (!confirm(name + ' 상태로 공용 DB를 복원합니다. 현재 상태는 먼저 안전 백업합니다. 계속할까요?')) return;
+      statusLine('#backup-status', true, '백업을 복원하고 있습니다.');
+      I.restore(db.settings, name).then(function (r) {
+        statusLine('#backup-status', r.ok, r.ok ? '복원 완료. 복원 직전 안전 백업: ' + r.safetyBackup : (r.error || '복원하지 못했습니다.'));
+      });
+    });
+    function runJob(forceLaws) {
+      Object.assign(db.settings, settingsFromForms()); cacheDb();
+      I.saveSettings(db.settings, '', '').then(function () {
+        statusLine('#job-status', true, '자동 점검을 실행하고 있습니다. 오류 항목은 기록하고 나머지는 계속 처리합니다.');
+        I.runJobs(db.settings, forceLaws).then(function (r) {
+          var message = r.ok ? '알림 ' + r.queued + '건 추가 · 법령 ' + r.lawChecked + '건 확인 · 변경 ' + r.lawChanged + '건'
+            : '일부 항목을 처리하지 못했습니다: ' + ((r.errors || []).join(' / ') || r.error || '확인 필요');
+          statusLine('#job-status', !!r.ok, message); loadJobs();
+        });
+      });
+    }
+    $('#job-run').addEventListener('click', function () { runJob(false); });
+    $('#job-run-laws').addEventListener('click', function () { runJob(true); });
+    renderSyncSummary(); loadAudit(); loadBackups(); loadJobs();
   }
 
   /* ═══════════════════════════════════════ 내보내기·가져오기 */
@@ -2031,10 +2150,11 @@
   function exportCostXlsx() {
     if (!lastForecast || !lastForecast.lines.length) { alert('내보낼 항목이 없습니다.'); return; }
     var rows = lastForecast.lines.map(function (l) {
-      return { 항목: l.name, 구분: l.kind, 횟수: l.count, 단가: l.unit, 합계: l.sum };
+      return { 항목: l.name, 구분: l.kind, 횟수: l.count, '현재 단가': l.unit,
+        '물가 반영 단가': l.adjustedUnit, 합계: l.adjustedSum };
     });
     // 셀 수 없었던 것도 같은 파일에 넣는다. 따로 두면 안 보고 지나친다.
-    rows.push({ 항목: '', 구분: '', 횟수: '', 단가: '합계', 합계: lastForecast.total });
+    rows.push({ 항목: '', 구분: '', 횟수: '', '현재 단가': '예비비 포함 최종', 합계: lastForecast.grandTotal });
     lastForecast.unknown.forEach(function (u) {
       rows.push({ 항목: '[셀 수 없음] ' + u, 구분: '', 횟수: '', 단가: '', 합계: '' });
     });

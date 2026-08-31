@@ -77,6 +77,34 @@ class FacilityServerTest(unittest.TestCase):
         self.assertTrue(backup.is_file())
         self.assertEqual(backup.parent, share / "backups")
 
+    def test_backup_restore_keeps_safety_copy(self):
+        share = self.root / "share"
+        server.save_config({"sharedPath": str(share)})
+        server.save_shared_state({"baseRevision": 0, "data": {"equipments": [{"id": "old"}]}})
+        backup = server.create_backup()
+        server.save_shared_state({"baseRevision": 1, "data": {"equipments": [{"id": "new"}]}})
+        result = server.restore_backup(backup.name)
+        self.assertTrue(result["ok"])
+        with server.database() as conn:
+            state = server.state_snapshot(conn)
+        self.assertEqual(state["data"]["equipments"][0]["id"], "old")
+        self.assertGreaterEqual(len(server.list_backups()), 2)
+
+    def test_scheduled_job_queues_due_item_and_logs_run(self):
+        share = self.root / "share"
+        server.save_config({"sharedPath": str(share)})
+        server.save_shared_state({"baseRevision": 0, "data": {"equipments": [{
+            "id": "eq1", "name": "보일러", "lastInspect": "2025-09-20", "cycleMonths": 12,
+            "mgr": "담당자", "mgrEmail": "manager@example.com"}]}})
+        result = server.run_scheduled_jobs()
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["queued"], 1)
+        with server.database() as conn:
+            state = server.state_snapshot(conn)
+            runs = conn.execute("SELECT COUNT(*) FROM job_runs").fetchone()[0]
+        self.assertEqual(len(state["data"]["notificationQueue"]), 1)
+        self.assertEqual(runs, 1)
+
     def test_api_token_and_origin_are_enforced(self):
         server.save_config({"sharedPath": str(self.root / "share"), "apiToken": "test-token"})
         httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
@@ -102,6 +130,24 @@ class FacilityServerTest(unittest.TestCase):
             httpd.shutdown()
             httpd.server_close()
             thread.join(timeout=2)
+
+    def test_viewer_token_can_read_but_cannot_write(self):
+        server.save_config({"sharedPath": str(self.root / "share"), "apiToken": "admin-token",
+                            "viewerTokens": ["viewer-token"]})
+        httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
+        thread = threading.Thread(target=httpd.serve_forever, daemon=True); thread.start()
+        base = f"http://127.0.0.1:{httpd.server_address[1]}"
+        try:
+            read = Request(base + "/api/health", headers={"Authorization": "Bearer viewer-token"})
+            with urlopen(read, timeout=2) as response:
+                self.assertEqual(json.load(response)["role"], "viewer")
+            write = Request(base + "/api/backup", data=b"{}", method="POST", headers={
+                "Authorization": "Bearer viewer-token", "Content-Type": "application/json"})
+            with self.assertRaises(HTTPError) as denied:
+                urlopen(write, timeout=2)
+            self.assertEqual(denied.exception.code, 403)
+        finally:
+            httpd.shutdown(); httpd.server_close(); thread.join(timeout=2)
 
     def test_same_origin_page_has_server_marker_and_security_headers(self):
         server.save_config({"sharedPath": str(self.root / "share")})
