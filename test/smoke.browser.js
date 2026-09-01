@@ -129,8 +129,11 @@ function serve(port) {
     ok(registrationLabels.join('|') === [
       '설비번호','설비명','종류','모델명','제조사','용량','유량','압력','소모전력','냉난방능력',
       '기타사양','위치','세부위치','설치일','법정선임관리자','유지관리자','유지관리자 메일',
-      '법정검사','검사주기','검사비용','법령 확인일','매뉴얼 업로드'
+      '법정검사 항목','법령 확인일','매뉴얼 업로드'
     ].join('|'), '설비 등록 항목이 요청 순서대로 한 줄씩 나온다');
+    await page.click('#eq-inspection-add');
+    ok(await page.locator('#eq-inspection-list .inspection-row').count() === 2,
+       '한 설비에 검사주기와 비용을 복수 항목으로 추가할 수 있다');
     await page.selectOption('#kind', '기타');
     ok(await page.isVisible('#kind-other'), '종류가 기타이면 직접 입력 칸이 열린다');
 
@@ -349,12 +352,13 @@ function serve(port) {
 
     group('9. 조감도 — 건물을 눌러 그 건물 설비 보기');
     await go('map.html');
-    var bldgs = await page.locator('#campus .bldg, #campus [data-bldg], #campus g, #campus rect').count();
+    var bldgs = await page.locator('#campus polygon[data-building-id]').count();
     ok(bldgs > 0, '건물이 그려진다 (' + bldgs + '개)');
     ok(await page.locator('#campus [data-building-id]').count() === bldgs,
        '건물 ID와 좌표 구조로 배치된다');
     ok(await page.locator('#campus-image').count() === 1 && await page.locator('#building-editor tbody tr').count() === bldgs,
-       '조감도 배경 이미지와 건물 좌표를 화면에서 편집할 수 있다');
+       '조감도 배경 이미지와 건물 다각형을 화면에서 편집할 수 있다');
+    ok(await page.isVisible('#building-draw-start'), '건물 추가 버튼으로 새 다각형 그리기를 시작할 수 있다');
 
     group('10. 좁은 화면에서 가로로 넘치지 않는다');
     await go('');

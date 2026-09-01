@@ -210,9 +210,11 @@ PAGES["equipment.html"] = """
       <div class="register-row"><label for="eq-legal-mgr">법정선임관리자</label><select id="eq-legal-mgr" name="legalManagerId"></select></div>
       <div class="register-row"><label for="eq-mgr">유지관리자</label><select id="eq-mgr" name="maintenanceManagerId"></select></div>
       <div class="register-row"><label for="eq-mgr-email">유지관리자 메일</label><input id="eq-mgr-email" name="mgrEmail" type="email" readonly placeholder="담당자 대장에서 자동 표시"></div>
-      <div class="register-row"><label for="eq-last-inspect">법정검사</label><input id="eq-last-inspect" name="lastInspect" type="date"></div>
-      <div class="register-row"><label for="eq-cycle">검사주기</label><div class="input-with-unit"><input id="eq-cycle" name="cycleMonths" type="number" min="1" step="1" placeholder="12"><span>개월</span></div></div>
-      <div class="register-row"><label for="eq-cost">검사비용</label><div class="input-with-unit"><input id="eq-cost" name="inspectCost" type="number" min="0" step="1000" placeholder="0"><span>원</span></div></div>
+      <div class="register-row inspection-register-row"><label>법정검사 항목</label><div class="register-control">
+        <div id="eq-inspection-list" class="inspection-editor"></div>
+        <button class="btn small-btn" id="eq-inspection-add" type="button">+ 검사 항목 추가</button>
+        <span class="sub">받아야 하는 검사가 여러 개면 항목별 최근 검사일·주기·비용을 등록하세요.</span>
+      </div></div>
       <div class="register-row"><label for="eq-law-date">법령 확인일</label><input id="eq-law-date" name="lawCheckedAt" type="date"></div>
       <div class="register-row"><label for="eq-manual-file">매뉴얼 업로드</label><div class="register-control"><label class="btn file-button" id="eq-manual-file-button" for="eq-manual-file">파일 선택</label><input id="eq-manual-file" type="file" accept=".pdf,.txt,.csv,.xlsx,.xls,.docx"><span class="sub" id="eq-manual-file-name">설비 저장 후 공유폴더에 업로드하고 분석합니다.</span></div></div>
     </form>
@@ -238,6 +240,11 @@ PAGES["equipment.html"] = """
 
 	  <section class="detail-panel on" data-detail-panel="basic">
 	    <form id="detail-basic-form" class="grid-form"></form>
+	    <div class="inspection-detail-box">
+	      <div class="section-toolbar"><div><h3>법정검사 항목</h3><p class="sub">검사별 최근일·주기·비용을 각각 관리합니다.</p></div>
+	        <button class="btn small-btn" id="detail-inspection-add" type="button">+ 검사 항목 추가</button></div>
+	      <div id="detail-inspection-list" class="inspection-editor"></div>
+	    </div>
 	    <div class="btnrow"><button class="btn primary" id="detail-basic-save" type="button">기본정보 저장</button></div>
 	  </section>
 
@@ -256,6 +263,7 @@ PAGES["equipment.html"] = """
 	  <section class="detail-panel" data-detail-panel="history" hidden>
 	    <form id="detail-history-form" class="grid-form compact-form">
 	      <label>구분 <select name="kind"><option>유지보수</option><option>고장 AS</option><option>법정검사</option><option>소모품 교체</option><option>기타</option></select></label>
+	      <label data-history-inspection hidden>검사 항목 <select name="inspectionId"></select></label>
 	      <label data-history-consumable hidden>교체 소모품 <select name="consumableId"></select></label>
 	      <label>일자 <input name="date" type="date" required></label>
 	      <label>업체 <input name="vendor"></label>
@@ -394,6 +402,7 @@ PAGES["history.html"] = """
       <select name="kind">
         <option>법정검사</option><option>소모품 교체</option><option>고장 AS</option><option>기타</option>
       </select></label>
+    <label data-history-inspection hidden>검사 항목 <select name="inspectionId"></select></label>
     <label data-history-consumable hidden>교체 소모품 <select name="consumableId"></select></label>
     <label>일자 <input name="date" type="date" required></label>
     <label>금액(원) <input name="cost" type="number" min="0" step="1000" placeholder="모르면 비워 둡니다"></label>
@@ -499,16 +508,21 @@ PAGES["map.html"] = """
     <label class="btn file-button" for="campus-image">조감도 이미지 선택</label>
     <input id="campus-image" type="file" accept="image/png,image/jpeg,image/webp">
     <button class="btn" id="campus-image-clear" type="button">배경 이미지 제거</button>
+    <button class="btn primary" id="building-draw-start" type="button">+ 건물 추가</button>
+    <button class="btn" id="building-draw-undo" type="button" hidden>마지막 점 취소</button>
+    <button class="btn" id="building-draw-finish" type="button" hidden>다각형 완성</button>
+    <button class="btn" id="building-draw-cancel" type="button" hidden>그리기 취소</button>
   </div>
-  <p class="sub">배경 이미지는 보안상 이 PC 브라우저에만 저장되고 외부로 전송되지 않습니다. 아래 좌표는 공용 데이터로 저장됩니다.</p>
+  <p class="sub">건물 추가를 누른 뒤 조감도 위에서 건물 외곽점을 3개 이상 순서대로 찍고 다각형 완성을 누르세요. 배경 이미지는 이 PC에만, 다각형 좌표는 공용 데이터로 저장됩니다.</p>
+  <div id="building-draw-status" aria-live="polite"></div>
   <div id="campus"></div>
 </div>
 
 <div class="card">
-  <h2>건물 좌표 편집</h2>
-  <p class="sub">조감도에 맞춰 왼쪽·위·너비·높이를 백분율로 조정한 뒤 저장하세요.</p>
-  <div class="tablewrap"><table id="building-editor"><thead><tr><th>건물</th><th>왼쪽(%)</th><th>위(%)</th><th>너비(%)</th><th>높이(%)</th></tr></thead><tbody></tbody></table></div>
-  <div class="btnrow"><button class="btn primary" id="building-save" type="button">좌표 저장</button></div>
+  <h2>건물 목록</h2>
+  <p class="sub">다각형 완성 후 건물 이름을 입력해 저장하세요. 이름을 바꾸면 해당 설비의 위치도 함께 변경됩니다.</p>
+  <div class="tablewrap"><table id="building-editor"><thead><tr><th>건물 이름</th><th>꼭짓점</th><th>관리</th></tr></thead><tbody></tbody></table></div>
+  <div class="btnrow"><button class="btn primary" id="building-save" type="button">건물 목록 저장</button></div>
   <div id="building-status"></div>
 </div>
 

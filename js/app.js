@@ -16,6 +16,7 @@
   var selectedRegistrationManualFile = null;
   var selectedLawFile = null;
   var currentLawDocumentId = null;
+  var buildingDraft = null;
   var syncQueue = Promise.resolve();
 
   /* ────────────────────────────────────────────────────────── 도구 */
@@ -125,6 +126,73 @@
     if (maintenance) { e.mgr = managerText(maintenance); e.mgrEmail = maintenance.email || ''; }
   }
 
+  function inspectionsOf(e) {
+    if (!e) return [];
+    if (Array.isArray(e.inspections) && e.inspections.length) return e.inspections;
+    if (e.lastInspect || e.cycleMonths || e.inspectCost !== null && e.inspectCost !== undefined) {
+      return [{ id: (e.id || 'equipment') + '-inspection-1', name: '정기검사',
+        lastDate: e.lastInspect || '', cycleMonths: e.cycleMonths || null,
+        cost: e.inspectCost === undefined ? null : e.inspectCost }];
+    }
+    return [];
+  }
+
+  function syncPrimaryInspection(e) {
+    var first = inspectionsOf(e)[0];
+    e.lastInspect = first ? first.lastDate || '' : '';
+    e.cycleMonths = first ? first.cycleMonths : null;
+    e.inspectCost = first ? first.cost : null;
+  }
+
+  function inspectionRow(item) {
+    item = item || {};
+    return '<div class="inspection-row" data-inspection-id="' + esc(item.id || '') + '">'
+      + '<label>검사명<input data-inspection-field="name" value="' + esc(item.name || '') + '" placeholder="정기검사" required></label>'
+      + '<label>최근 검사일<input data-inspection-field="lastDate" type="date" value="' + esc(item.lastDate || '') + '"></label>'
+      + '<label>주기(개월)<input data-inspection-field="cycleMonths" type="number" min="1" step="1" value="' + esc(item.cycleMonths == null ? '' : item.cycleMonths) + '" placeholder="12"></label>'
+      + '<label>비용(원)<input data-inspection-field="cost" type="number" min="0" step="1000" value="' + esc(item.cost == null ? '' : item.cost) + '" placeholder="모르면 비움"></label>'
+      + '<button class="btn small-btn inspection-remove" type="button" data-inspection-remove>삭제</button></div>';
+  }
+
+  function bindInspectionEditor(root) {
+    $$('[data-inspection-remove]', root).forEach(function (button) {
+      if (button.getAttribute('data-bound') === '1') return;
+      button.setAttribute('data-bound', '1');
+      button.addEventListener('click', function () {
+        var row = button.closest('[data-inspection-id]'); if (row) row.remove();
+      });
+    });
+  }
+
+  function addInspectionRow(root, item) {
+    root.insertAdjacentHTML('beforeend', inspectionRow(item || { id: St.newId('i') }));
+    bindInspectionEditor(root);
+  }
+
+  function readInspectionEditor(root) {
+    var rows = $$('[data-inspection-id]', root), out = [];
+    for (var i = 0; i < rows.length; i++) {
+      var row = rows[i], values = {}, inputs = $$('[data-inspection-field]', row);
+      for (var j = 0; j < inputs.length; j++) {
+        if (!inputs[j].reportValidity()) return null;
+        values[inputs[j].getAttribute('data-inspection-field')] = inputs[j].value.trim();
+      }
+      values.id = row.getAttribute('data-inspection-id') || St.newId('i');
+      values.cycleMonths = values.cycleMonths === '' ? null : Number(values.cycleMonths);
+      values.cost = values.cost === '' ? null : Number(values.cost);
+      out.push(values);
+    }
+    return out;
+  }
+
+  function soonestInspection(e, at, lead) {
+    var rows = inspectionsOf(e).map(function (item) {
+      return { item: item, r: S.nextInspection(item.lastDate, item.cycleMonths, at, lead) };
+    }).filter(function (x) { return x.r.next !== null; });
+    rows.sort(function (a, b) { return a.r.dday - b.r.dday; });
+    return rows[0] || { item: null, r: S.nextInspection(null, null, at, lead) };
+  }
+
   /** 상태별 색 */
   function badge(status) {
     var color = { '기한 초과': 'var(--danger)', '오늘': 'var(--danger)', '알림': 'var(--warn)',
@@ -141,8 +209,13 @@
   function allDue(t, leadI, leadR) {
     var out = [];
     db.equipments.forEach(function (e) {
-      var r = S.nextInspection(e.lastInspect, e.cycleMonths, t, leadI);
-      out.push({ type: '법정검사', sourceId: e.id, eq: e, item: '정기검사', r: r, cost: e.inspectCost });
+      var items = inspectionsOf(e);
+      if (!items.length) items = [{ id: e.id + '-inspection-none', name: '정기검사', lastDate: '', cycleMonths: null, cost: null }];
+      items.forEach(function (inspection) {
+        var r = S.nextInspection(inspection.lastDate, inspection.cycleMonths, t, leadI);
+        out.push({ type: '법정검사', sourceId: inspection.id, eq: e,
+          item: inspection.name || '정기검사', r: r, cost: inspection.cost });
+      });
     });
     db.consumables.forEach(function (c) {
       var r = S.nextReplacement(c.lastDate, c.cycleMonths, t, leadR);
@@ -220,6 +293,13 @@
     $('#eq-mgr').addEventListener('change', function () {
       var m = managerById(this.value); $('#eq-mgr-email').value = m ? m.email || '' : '';
     });
+    addInspectionRow($('#eq-inspection-list'), { id: St.newId('i'), name: '정기검사' });
+    $('#eq-inspection-add').addEventListener('click', function () {
+      addInspectionRow($('#eq-inspection-list'), { id: St.newId('i') });
+    });
+    $('#detail-inspection-add').addEventListener('click', function () {
+      addInspectionRow($('#detail-inspection-list'), { id: St.newId('i') });
+    });
 
     function syncOtherKind(focus) {
       var input = $('#kind-other');
@@ -256,13 +336,13 @@
       if (!f.reportValidity()) return;
       var o = { id: St.newId('eq') };
       $$('#eq-form [name]').forEach(function (i) { o[i.name] = i.value.trim(); });
+      o.inspections = readInspectionEditor($('#eq-inspection-list'));
+      if (o.inspections === null) return;
+      syncPrimaryInspection(o);
       applyManagerSnapshot(o);
       if (o.kind === '기타') o.kind = $('#kind-other').value.trim();
       // 숫자로 둘 것만 숫자로. 빈 값은 null 로 둔다 — 0 으로 두면 "주기 0" 이 되어
       // "주기 없음" 과 구분이 안 된다.
-      ['cycleMonths', 'inspectCost'].forEach(function (k) {
-        o[k] = o[k] === '' ? null : Number(o[k]);
-      });
       ensureBuilding(o.building);
       db.equipments.push(o);
       if (persist()) {
@@ -270,6 +350,8 @@
         f.reset(); selectedRegistrationManualFile = null;
         $('#eq-manual-file-button').textContent = '파일 선택';
         $('#eq-manual-file-name').textContent = '설비 저장 후 공유폴더에 업로드하고 분석합니다.';
+        $('#eq-inspection-list').innerHTML = '';
+        addInspectionRow($('#eq-inspection-list'), { id: St.newId('i'), name: '정기검사' });
         syncOtherKind(false); renderEquipment(); closeCreateDialog();
         if (registrationFile) addManualAndAnalyze(o, registrationFile, registrationFile.name);
       }
@@ -278,6 +360,8 @@
       $('#eq-form').reset(); selectedRegistrationManualFile = null;
       $('#eq-manual-file-button').textContent = '파일 선택';
       $('#eq-manual-file-name').textContent = '설비 저장 후 공유폴더에 업로드하고 분석합니다.';
+      $('#eq-inspection-list').innerHTML = '';
+      addInspectionRow($('#eq-inspection-list'), { id: St.newId('i'), name: '정기검사' });
       syncOtherKind(false);
     });
 
@@ -370,8 +454,8 @@
         + '<td>' + esc(e.place) + '</td>'
         + '<td>' + esc(e.spec) + '</td>'
         + '<td>' + esc(e.mgr) + '</td>'
-        + '<td class="mono">' + esc(e.lastInspect || '—') + '</td>'
-        + '<td class="num">' + (e.cycleMonths ? e.cycleMonths + '개월' : '—') + '</td>'
+        + '<td class="mono">' + esc(inspectionsOf(e).map(function (i) { return i.lastDate || '미입력'; }).join(' · ') || '—') + '</td>'
+        + '<td class="num">' + esc(inspectionsOf(e).map(function (i) { return (i.name || '검사') + ' ' + (i.cycleMonths ? i.cycleMonths + '개월' : '미입력'); }).join(' · ') || '—') + '</td>'
         + '<td class="mono">' + esc((latestLaw && latestLaw.checkedAt) || e.lawCheckedAt || '—') + '</td></tr>';
     }).join('') : '<tr><td colspan="11" class="sub">등록된 설비가 없습니다.</td></tr>';
 
@@ -407,7 +491,9 @@
     if (!name || buildingRecords().some(function (b) { return b.name === name; })) return;
     var i = db.buildings.length, col = i % 4, row = Math.floor(i / 4);
     db.buildings.push({ id: St.buildingId(name), name: name,
-      x: 4 + col * 24, y: 8 + row * 30, w: 20, h: 22 });
+      x: 4 + col * 24, y: 8 + row * 30, w: 20, h: 22,
+      points: [{ x: 4 + col * 24, y: 8 + row * 30 }, { x: 24 + col * 24, y: 8 + row * 30 },
+        { x: 24 + col * 24, y: 30 + row * 30 }, { x: 4 + col * 24, y: 30 + row * 30 }] });
   }
 
   /* ─────────────────────────────────────────────── 설비 상세 5개 탭 */
@@ -491,11 +577,10 @@
       + selectField('법정선임관리자', 'legalManagerId', managerOptions('legal', e.legalManagerId))
       + selectField('유지관리자', 'maintenanceManagerId', managerOptions('maintenance', e.maintenanceManagerId))
       + field('유지관리자 메일', 'mgrEmail', e.mgrEmail, 'email', ' readonly')
-      + field('법정검사', 'lastInspect', e.lastInspect, 'date')
-      + field('검사주기(개월)', 'cycleMonths', e.cycleMonths, 'number', ' min="1" step="1"')
-      + field('검사비용(원)', 'inspectCost', e.inspectCost, 'number', ' min="0" step="1000"')
       + field('법령 확인일', 'lawCheckedAt', e.lawCheckedAt, 'date')
       + field('비고', 'note', e.note);
+    $('#detail-inspection-list').innerHTML = inspectionsOf(e).map(inspectionRow).join('');
+    bindInspectionEditor($('#detail-inspection-list'));
     var maintenanceSelect = $('#detail-basic-form [name=maintenanceManagerId]');
     maintenanceSelect.addEventListener('change', function () {
       var m = managerById(this.value);
@@ -520,10 +605,10 @@
     var e = detailEquipment(), f = $('#detail-basic-form');
     if (!e || !f.reportValidity()) return;
     $$('[name]', f).forEach(function (i) { e[i.name] = i.value.trim(); });
+    e.inspections = readInspectionEditor($('#detail-inspection-list'));
+    if (e.inspections === null) return;
     applyManagerSnapshot(e);
-    ['cycleMonths', 'inspectCost'].forEach(function (k) {
-      e[k] = e[k] === '' ? null : Number(e[k]);
-    });
+    syncPrimaryInspection(e);
     ensureBuilding(e.building);
     if (persist()) { renderEquipment(); renderEquipmentDetail(); }
   }
@@ -742,7 +827,10 @@
         var parts = b.getAttribute('data-apply-manual-inspection').split(':'), manual = db.manuals.find(function (m) { return m.id === parts[0]; });
         var p = manual && manual.analysis && manual.analysis.inspections[Number(parts[1])];
         if (!p || !p.cycleMonths) { alert('개월 단위로 확인된 검사주기가 없습니다. 근거를 확인해 직접 입력하세요.'); return; }
-        e.cycleMonths = Number(p.cycleMonths);
+        e.inspections = inspectionsOf(e).slice();
+        e.inspections.push({ id: St.newId('i'), name: p.name || '매뉴얼 제안 검사',
+          lastDate: '', cycleMonths: Number(p.cycleMonths), cost: null });
+        syncPrimaryInspection(e);
         if (persist()) { renderDetailBasic(e); renderEquipment(); b.textContent = '반영됨'; b.disabled = true; }
       });
     });
@@ -1250,17 +1338,23 @@
       + '<div class="stat">임박<b style="color:var(--warn)">' + soon + '건</b></div>'
       + '<div class="stat">알 수 없음<b>' + unk + '건</b></div>';
 
-    $('#insp tbody').innerHTML = db.equipments.length ? db.equipments.map(function (e) {
-      var r = S.nextInspection(e.lastInspect, e.cycleMonths, p.t, p.i);
-      return '<tr' + (r.status === '기한 초과' ? ' class="flag"' : '') + '>'
+    var inspectionRows = [];
+    db.equipments.forEach(function (e) {
+      var items = inspectionsOf(e);
+      if (!items.length) items = [{ name: '정기검사', lastDate: '', cycleMonths: null }];
+      items.forEach(function (inspection) {
+      var r = S.nextInspection(inspection.lastDate, inspection.cycleMonths, p.t, p.i);
+      inspectionRows.push('<tr' + (r.status === '기한 초과' ? ' class="flag"' : '') + '>'
         + '<td class="mono">' + esc(e.code) + '</td><td>' + esc(e.name) + '</td><td>' + esc(e.kind) + '</td>'
-        + '<td class="mono">' + esc(e.lastInspect || '—') + '</td>'
-        + '<td class="num">' + (e.cycleMonths ? e.cycleMonths + '개월' : '—') + '</td>'
+        + '<td class="mono">' + esc(inspection.lastDate || '—') + '<div class="sub">' + esc(inspection.name || '정기검사') + '</div></td>'
+        + '<td class="num">' + (inspection.cycleMonths ? inspection.cycleMonths + '개월' : '—') + '</td>'
         + '<td class="mono">' + esc(r.nextText || '—') + '</td>'
         + '<td class="num">' + (r.dday === null ? '—' : r.dday + '일') + '</td>'
         + '<td>' + badge(r.status) + (r.why ? '<div class="sub" style="white-space:normal">' + esc(r.why) + '</div>' : '') + '</td>'
-        + '<td>' + esc(e.mgr) + '</td></tr>';
-    }).join('') : '<tr><td colspan="9" class="sub">등록된 설비가 없습니다.</td></tr>';
+        + '<td>' + esc(e.mgr) + '</td></tr>');
+      });
+    });
+    $('#insp tbody').innerHTML = inspectionRows.length ? inspectionRows.join('') : '<tr><td colspan="9" class="sub">등록된 설비가 없습니다.</td></tr>';
 
     $('#cons tbody').innerHTML = db.consumables.length ? db.consumables.map(function (c) {
       var r = S.nextReplacement(c.lastDate, c.cycleMonths, p.t, p.r);
@@ -1455,9 +1549,22 @@
 
   function syncHistoryConsumables(form, equipmentId) {
     if (!form) return;
-    var kind = form.querySelector('[name=kind]'), wrap = form.querySelector('[data-history-consumable]');
-    var select = form.querySelector('[name=consumableId]');
-    if (!kind || !wrap || !select) return;
+    var kind = form.querySelector('[name=kind]'); if (!kind) return;
+    var inspectionWrap = form.querySelector('[data-history-inspection]');
+    var inspectionSelect = form.querySelector('[name=inspectionId]');
+    if (inspectionWrap && inspectionSelect) {
+      var inspectionShown = kind.value === '법정검사';
+      inspectionWrap.hidden = !inspectionShown; inspectionSelect.required = inspectionShown;
+      if (!inspectionShown) inspectionSelect.value = '';
+      else {
+        var equipment = eqById(equipmentId), inspections = inspectionsOf(equipment);
+        inspectionSelect.innerHTML = '<option value="">— 완료한 검사 선택 —</option>' + inspections.map(function (item) {
+          return '<option value="' + esc(item.id) + '">' + esc(item.name || '정기검사') + '</option>';
+        }).join('');
+      }
+    }
+    var wrap = form.querySelector('[data-history-consumable]'), select = form.querySelector('[name=consumableId]');
+    if (!wrap || !select) return;
     var shown = kind.value === '소모품 교체';
     wrap.hidden = !shown; select.required = shown;
     if (!shown) { select.value = ''; return; }
@@ -1470,9 +1577,14 @@
   function applyCompletedHistory(h) {
     var e = eqById(h.equipmentId), changed = 0;
     if (!e || !S.parseDate(h.date)) return changed;
-    if (h.kind === '법정검사' && (!e.lastInspect || h.date >= e.lastInspect)) {
-      if (e.lastInspect !== h.date) { e.lastInspect = h.date; changed++; }
-      if (h.cost !== null && Number.isFinite(Number(h.cost))) e.inspectCost = Number(h.cost);
+    if (h.kind === '법정검사') {
+      e.inspections = inspectionsOf(e).slice();
+      var inspection = e.inspections.find(function (item) { return item.id === h.inspectionId; }) || e.inspections[0];
+      if (inspection && (!inspection.lastDate || h.date >= inspection.lastDate)) {
+        if (inspection.lastDate !== h.date) { inspection.lastDate = h.date; changed++; }
+        if (h.cost !== null && Number.isFinite(Number(h.cost))) inspection.cost = Number(h.cost);
+        syncPrimaryInspection(e);
+      }
     }
     if (h.kind === '소모품 교체') {
       var c = db.consumables.find(function (item) {
@@ -1528,10 +1640,15 @@
   function applyLatestToEquipment() {
     var changed = 0;
     db.equipments.forEach(function (e) {
-      var mine = db.history.filter(function (h) {
-        return h.equipmentId === e.id && h.kind === '법정검사' && S.parseDate(h.date);
-      }).sort(function (a, b) { return a.date < b.date ? 1 : -1; });
-      if (mine.length && mine[0].date !== e.lastInspect) { e.lastInspect = mine[0].date; changed++; }
+      e.inspections = inspectionsOf(e).slice();
+      e.inspections.forEach(function (inspection, index) {
+        var mine = db.history.filter(function (h) {
+          if (h.equipmentId !== e.id || h.kind !== '법정검사' || !S.parseDate(h.date)) return false;
+          return h.inspectionId === inspection.id || (!h.inspectionId && index === 0);
+        }).sort(function (a, b) { return a.date < b.date ? 1 : -1; });
+        if (mine.length && mine[0].date !== inspection.lastDate) { inspection.lastDate = mine[0].date; changed++; }
+      });
+      syncPrimaryInspection(e);
     });
     db.consumables.forEach(function (c) {
       var mine = db.history.filter(function (h) {
@@ -1557,9 +1674,12 @@
 
   /** 예측 대상 = 설비의 법정검사 + 소모품 */
   function costItems() {
-    var items = db.equipments.map(function (e) {
-      return { name: (e.code ? e.code + ' ' : '') + e.name + ' 정기검사', kind: '법정검사',
-               lastDate: e.lastInspect, cycleMonths: e.cycleMonths, cost: e.inspectCost };
+    var items = [];
+    db.equipments.forEach(function (e) {
+      inspectionsOf(e).forEach(function (inspection) {
+        items.push({ name: (e.code ? e.code + ' ' : '') + e.name + ' · ' + (inspection.name || '정기검사'), kind: '법정검사',
+          lastDate: inspection.lastDate, cycleMonths: inspection.cycleMonths, cost: inspection.cost });
+      });
     });
     db.consumables.forEach(function (c) {
       items.push({ name: eqName(c.equipmentId) + ' · ' + c.name, kind: '소모품',
@@ -1865,51 +1985,143 @@
     $('#campus-image-clear').addEventListener('click', function () {
       db.settings.mapImageData = ''; cacheDb(); renderCampus();
     });
+    $('#building-draw-start').addEventListener('click', function () { startBuildingDrawing(null); });
+    $('#building-draw-undo').addEventListener('click', function () {
+      if (!buildingDraft || !buildingDraft.points.length) return;
+      buildingDraft.points.pop(); renderCampus();
+      statusLine('#building-draw-status', true, '마지막 점을 취소했습니다. 현재 ' + buildingDraft.points.length + '개입니다.');
+    });
+    $('#building-draw-cancel').addEventListener('click', cancelBuildingDrawing);
+    $('#building-draw-finish').addEventListener('click', finishBuildingDrawing);
     $('#building-save').addEventListener('click', function () {
+      var names = [], invalid = false;
       $$('#building-editor tbody tr').forEach(function (tr) {
         var b = db.buildings.find(function (x) { return x.id === tr.getAttribute('data-id'); });
         if (!b) return;
-        ['x', 'y', 'w', 'h'].forEach(function (key) {
-          var value = Number(tr.querySelector('[name=' + key + ']').value);
-          if (Number.isFinite(value)) b[key] = Math.max(0, Math.min(100, value));
-        });
+        var input = tr.querySelector('[name=buildingName]'), name = input.value.trim();
+        if (!name || names.indexOf(name) >= 0) { invalid = true; input.focus(); return; }
+        names.push(name);
+        var old = b.name; b.name = name;
+        if (old !== name) db.equipments.forEach(function (e) { if (e.building === old) e.building = name; });
       });
-      if (persist()) { statusLine('#building-status', true, '건물 좌표를 저장했습니다.'); renderCampus(); }
+      if (invalid) { statusLine('#building-status', false, '건물 이름은 비워둘 수 없고 서로 달라야 합니다.'); return; }
+      if (persist()) { statusLine('#building-status', true, '건물 이름과 다각형 좌표를 저장했습니다.'); renderCampus(); renderBuildingEditor(); }
     });
     renderCampus();
     renderBuildingEditor();
   }
 
+  function setDrawingButtons(on) {
+    $('#building-draw-start').hidden = on;
+    $('#building-draw-undo').hidden = !on;
+    $('#building-draw-finish').hidden = !on;
+    $('#building-draw-cancel').hidden = !on;
+  }
+
+  function startBuildingDrawing(buildingId) {
+    buildingDraft = { editingId: buildingId || null, points: [] };
+    setDrawingButtons(true);
+    statusLine('#building-draw-status', true, '조감도 위에서 건물 외곽점을 순서대로 찍으세요. 3개 이상이면 완성할 수 있습니다.');
+    renderCampus();
+  }
+
+  function cancelBuildingDrawing() {
+    buildingDraft = null; setDrawingButtons(false);
+    $('#building-draw-status').innerHTML = '';
+    renderCampus();
+  }
+
+  function polygonBounds(points) {
+    var xs = points.map(function (p) { return p.x; }), ys = points.map(function (p) { return p.y; });
+    var x = Math.min.apply(Math, xs), y = Math.min.apply(Math, ys);
+    return { x: x, y: y, w: Math.max.apply(Math, xs) - x, h: Math.max.apply(Math, ys) - y };
+  }
+
+  function finishBuildingDrawing() {
+    if (!buildingDraft || buildingDraft.points.length < 3) {
+      statusLine('#building-draw-status', false, '다각형을 만들려면 외곽점을 3개 이상 찍어야 합니다.'); return;
+    }
+    var bounds = polygonBounds(buildingDraft.points), building;
+    if (buildingDraft.editingId) {
+      building = db.buildings.find(function (b) { return b.id === buildingDraft.editingId; });
+      if (building) { building.points = buildingDraft.points; Object.assign(building, bounds); }
+    } else {
+      var number = db.buildings.length + 1, name = '새 건물 ' + number;
+      while (db.buildings.some(function (b) { return b.name === name; })) { number++; name = '새 건물 ' + number; }
+      building = Object.assign({ id: St.newId('b'), name: name, points: buildingDraft.points }, bounds);
+      db.buildings.push(building);
+    }
+    buildingDraft = null; setDrawingButtons(false); cacheDb();
+    renderCampus(); renderBuildingEditor();
+    statusLine('#building-draw-status', true, building ? '다각형을 완성했습니다. 아래 목록에서 건물 이름을 확인하고 저장하세요.' : '건물을 찾지 못했습니다.');
+    if (building) {
+      var input = $('#building-editor tr[data-id="' + building.id + '"] [name=buildingName]');
+      if (input) { input.focus(); input.select(); }
+    }
+  }
+
   function renderBuildingEditor() {
     $('#building-editor tbody').innerHTML = buildingRecords().map(function (b) {
-      return '<tr data-id="' + esc(b.id) + '"><td><b>' + esc(b.name) + '</b></td>'
-        + ['x', 'y', 'w', 'h'].map(function (key) {
-          return '<td><input name="' + key + '" type="number" min="0" max="100" step="0.5" value="' + Number(b[key]) + '" style="width:90px"></td>';
-        }).join('') + '</tr>';
+      return '<tr data-id="' + esc(b.id) + '"><td><input class="building-name-input" name="buildingName" value="' + esc(b.name) + '" required></td>'
+        + '<td class="num">' + ((b.points || []).length) + '개</td><td><div class="btnrow">'
+        + '<button class="btn small-btn" type="button" data-building-redraw="' + esc(b.id) + '">다시 그리기</button>'
+        + '<button class="btn small-btn" type="button" data-building-delete="' + esc(b.id) + '">삭제</button></div></td></tr>';
     }).join('');
+    $$('[data-building-redraw]').forEach(function (button) {
+      button.addEventListener('click', function () { startBuildingDrawing(button.getAttribute('data-building-redraw')); });
+    });
+    $$('[data-building-delete]').forEach(function (button) {
+      button.addEventListener('click', function () {
+        var id = button.getAttribute('data-building-delete'), b = db.buildings.find(function (x) { return x.id === id; });
+        if (!b) return;
+        var assigned = db.equipments.filter(function (e) { return e.building === b.name; }).length;
+        if (assigned) { alert('이 건물에 설비 ' + assigned + '건이 연결되어 있습니다. 설비 위치를 먼저 변경하세요.'); return; }
+        if (!confirm('“' + b.name + '” 건물 영역을 삭제할까요?')) return;
+        db.buildings = db.buildings.filter(function (x) { return x.id !== id; });
+        if (persist()) { renderCampus(); renderBuildingEditor(); }
+      });
+    });
   }
 
   function renderCampus() {
     var bs = buildingRecords();
     var box = $('#campus');
-    if (!bs.length) {
-      box.innerHTML = '<p class="sub">설비에 <b>건물</b> 을 적으면 여기에 나타납니다.</p>';
-      return;
+    function pointsText(points) { return (points || []).map(function (p) { return Number(p.x).toFixed(2) + ',' + Number(p.y).toFixed(2); }).join(' '); }
+    function center(points) {
+      var n = points.length || 1;
+      return { x: points.reduce(function (sum, p) { return sum + Number(p.x); }, 0) / n,
+        y: points.reduce(function (sum, p) { return sum + Number(p.y); }, 0) / n };
     }
-    box.innerHTML = '<div class="campus-layout" aria-label="건물 좌표 배치">' + bs.map(function (b) {
+    var shapes = bs.map(function (b) {
       var n = db.equipments.filter(function (e) { return e.building === b.name; }).length;
-      return '<button type="button" class="bldg" data-b="' + esc(b.name) + '" data-building-id="' + esc(b.id) + '" '
-        + 'style="left:' + Number(b.x) + '%;top:' + Number(b.y) + '%;width:' + Number(b.w) + '%;height:' + Number(b.h) + '%">'
-        + '<b>' + esc(b.name) + '</b><span>' + n + '건</span></button>';
-    }).join('') + '</div>';
+      var c = center(b.points || []);
+      return '<polygon class="campus-shape" data-b="' + esc(b.name) + '" data-building-id="' + esc(b.id) + '" points="' + pointsText(b.points) + '"><title>' + esc(b.name + ' · 설비 ' + n + '건') + '</title></polygon>'
+        + '<text class="campus-label" x="' + c.x.toFixed(2) + '" y="' + c.y.toFixed(2) + '">' + esc(b.name) + ' · ' + n + '</text>';
+    }).join('');
+    var draft = buildingDraft ? '<polygon class="campus-draft" points="' + pointsText(buildingDraft.points) + '"></polygon>'
+      + buildingDraft.points.map(function (p) { return '<circle class="campus-draft-point" cx="' + p.x + '" cy="' + p.y + '" r="1.1"></circle>'; }).join('') : '';
+    box.innerHTML = '<div class="campus-layout' + (buildingDraft ? ' drawing' : '') + '" aria-label="건물 다각형 배치">'
+      + '<svg viewBox="0 0 100 100" preserveAspectRatio="none">' + shapes + draft + '</svg>'
+      + (!bs.length && !buildingDraft ? '<p class="sub campus-empty">건물 추가를 눌러 첫 건물의 외곽선을 그리세요.</p>' : '') + '</div>';
     if (db.settings.mapImageData) {
       $('.campus-layout', box).style.backgroundImage = 'url("' + db.settings.mapImageData + '")';
       $('.campus-layout', box).classList.add('has-image');
     }
 
-    $$('.bldg').forEach(function (btn) {
+    var layout = $('.campus-layout', box);
+    layout.addEventListener('click', function (event) {
+      if (!buildingDraft) return;
+      var rect = layout.getBoundingClientRect();
+      buildingDraft.points.push({ x: Math.max(0, Math.min(100, (event.clientX - rect.left) / rect.width * 100)),
+        y: Math.max(0, Math.min(100, (event.clientY - rect.top) / rect.height * 100)) });
+      renderCampus();
+      statusLine('#building-draw-status', true, '외곽점 ' + buildingDraft.points.length + '개를 찍었습니다.'
+        + (buildingDraft.points.length >= 3 ? ' 다각형 완성을 누르세요.' : ' 최소 3개가 필요합니다.'));
+    });
+    $$('.campus-shape', box).forEach(function (btn) {
       btn.addEventListener('click', function () {
-        $$('.bldg').forEach(function (x) { x.classList.remove('on'); });
+        if (buildingDraft) return;
+        $$('.campus-shape', box).forEach(function (x) { x.classList.remove('on'); });
         btn.classList.add('on');
         showBuilding(btn.getAttribute('data-b'));
       });
@@ -1921,7 +2133,7 @@
     var t = today();
     var list = db.equipments.filter(function (e) { return e.building === b; });
     $('#picked tbody').innerHTML = list.length ? list.map(function (e) {
-      var r = S.nextInspection(e.lastInspect, e.cycleMonths, t);
+      var next = soonestInspection(e, t), r = next.r;
       return '<tr><td class="mono">' + esc(e.code) + '</td><td>' + esc(e.name) + '</td>'
         + '<td>' + esc(e.kind) + '</td><td>' + esc(e.place) + '</td>'
         + '<td>' + esc(e.spec) + '</td><td>' + esc(e.power) + '</td>'
@@ -2131,14 +2343,17 @@
     if (!db.equipments.length) { alert('내보낼 설비가 없습니다.'); return; }
     var t = today();
     sheet(db.equipments.map(function (e) {
-      var r = S.nextInspection(e.lastInspect, e.cycleMonths, t);
+      var r = soonestInspection(e, t).r;
       var latestLaw = L.latestReview(e.id, db.lawReviews);
       return {
         설비번호: e.code, 설비명: e.name, 종류: e.kind, 건물: e.building, 설치위치: e.place,
         제조사: e.manufacturer, 모델: e.model, 사양: e.spec, 용량: e.capacity,
         유량: e.flow, 압력: e.pressure, 소모전력: e.power, 냉난방용량: e.hvac, 설치일: e.installedAt,
         법정선임관리자: e.legalMgr, 유지관리자: e.mgr, 메일: e.mgrEmail,
-        마지막검사: e.lastInspect || '', '주기(개월)': e.cycleMonths || '',
+        검사항목: inspectionsOf(e).map(function (i) { return i.name; }).join(' / '),
+        마지막검사: inspectionsOf(e).map(function (i) { return i.name + ':' + (i.lastDate || '미입력'); }).join(' / '),
+        '주기(개월)': inspectionsOf(e).map(function (i) { return i.name + ':' + (i.cycleMonths || '미입력'); }).join(' / '),
+        검사비용: inspectionsOf(e).map(function (i) { return i.name + ':' + (i.cost == null ? '미입력' : i.cost); }).join(' / '),
         다음검사: r.nextText || '', 상태: r.status,
         법령확인일: (latestLaw && latestLaw.checkedAt) || e.lawCheckedAt || '', 비고: e.note,
         매뉴얼수: St.forEquipment(db.manuals, e.id).length,

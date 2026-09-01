@@ -59,16 +59,21 @@
     <label class="btn file-button" for="campus-image">조감도 이미지 선택</label>
     <input id="campus-image" type="file" accept="image/png,image/jpeg,image/webp">
     <button class="btn" id="campus-image-clear" type="button">배경 이미지 제거</button>
+    <button class="btn primary" id="building-draw-start" type="button">+ 건물 추가</button>
+    <button class="btn" id="building-draw-undo" type="button" hidden>마지막 점 취소</button>
+    <button class="btn" id="building-draw-finish" type="button" hidden>다각형 완성</button>
+    <button class="btn" id="building-draw-cancel" type="button" hidden>그리기 취소</button>
   </div>
-  <p class="sub">배경 이미지는 보안상 이 PC 브라우저에만 저장되고 외부로 전송되지 않습니다. 아래 좌표는 공용 데이터로 저장됩니다.</p>
+  <p class="sub">건물 추가를 누른 뒤 조감도 위에서 건물 외곽점을 3개 이상 순서대로 찍고 다각형 완성을 누르세요. 배경 이미지는 이 PC에만, 다각형 좌표는 공용 데이터로 저장됩니다.</p>
+  <div id="building-draw-status" aria-live="polite"></div>
   <div id="campus"></div>
 </div>
 
 <div class="card">
-  <h2>건물 좌표 편집</h2>
-  <p class="sub">조감도에 맞춰 왼쪽·위·너비·높이를 백분율로 조정한 뒤 저장하세요.</p>
-  <div class="tablewrap"><table id="building-editor"><thead><tr><th>건물</th><th>왼쪽(%)</th><th>위(%)</th><th>너비(%)</th><th>높이(%)</th></tr></thead><tbody></tbody></table></div>
-  <div class="btnrow"><button class="btn primary" id="building-save" type="button">좌표 저장</button></div>
+  <h2>건물 목록</h2>
+  <p class="sub">다각형 완성 후 건물 이름을 입력해 저장하세요. 이름을 바꾸면 해당 설비의 위치도 함께 변경됩니다.</p>
+  <div class="tablewrap"><table id="building-editor"><thead><tr><th>건물 이름</th><th>꼭짓점</th><th>관리</th></tr></thead><tbody></tbody></table></div>
+  <div class="btnrow"><button class="btn primary" id="building-save" type="button">건물 목록 저장</button></div>
   <div id="building-status"></div>
 </div>
 

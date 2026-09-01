@@ -70,8 +70,16 @@ def queue_due_notifications(data: dict, today_value: str, inspection_lead: int =
         added += 1
 
     for equipment in data.get("equipments", []):
-        due, dday = next_due(equipment.get("lastInspect"), equipment.get("cycleMonths"), today_value)
-        enqueue("법정검사", str(equipment.get("id", "")), equipment, "정기검사", due, dday)
+        inspections = equipment.get("inspections")
+        if not isinstance(inspections, list) or not inspections:
+            inspections = [{"id": f"{equipment.get('id', '')}-inspection-1", "name": "정기검사",
+                            "lastDate": equipment.get("lastInspect"),
+                            "cycleMonths": equipment.get("cycleMonths"),
+                            "cost": equipment.get("inspectCost")}]
+        for inspection in inspections:
+            due, dday = next_due(inspection.get("lastDate"), inspection.get("cycleMonths"), today_value)
+            enqueue("법정검사", str(inspection.get("id") or equipment.get("id", "")), equipment,
+                    str(inspection.get("name") or "정기검사"), due, dday)
 
     for consumable in data.get("consumables", []):
         equipment = equipments.get(str(consumable.get("equipmentId")))
@@ -108,7 +116,7 @@ def missing_law_specs(equipment: dict, content: str) -> list[str]:
         ("소모전력", ("power",), r"소모전력|소비전력|정격전력"),
         ("냉난방능력", ("hvac",), r"냉방능력|난방능력|냉난방능력|냉동능력"),
         ("법정선임관리자", ("legalManagerId", "legalMgr"), r"법정선임|선임.*관리자|관리자.*선임"),
-        ("검사주기", ("cycleMonths",), r"검사주기|정기검사|매\s*\d+\s*(?:개월|년)"),
+        ("검사주기", ("cycleMonths", "inspections"), r"검사주기|정기검사|매\s*\d+\s*(?:개월|년)"),
     ]
     return [label for label, keys, pattern in checks
             if re.search(pattern, content, re.I)

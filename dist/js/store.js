@@ -12,7 +12,7 @@
   'use strict';
 
   var KEY = 'hd-facility-v1';
-  var SCHEMA_VERSION = 7;
+  var SCHEMA_VERSION = 8;
   var SHARED_KEYS = ['equipments', 'history', 'consumables', 'manuals', 'lawReviews',
     'lawDocuments', 'lawVersions', 'lawChanges', 'analysisResults', 'energy', 'buildings',
     'managers', 'notificationQueue'];
@@ -29,7 +29,7 @@
     lawChanges: [],   // 이전·최신 원문 차이와 설비 영향 검토 상태
     analysisResults: [], // 매뉴얼·법령 분석 결과와 근거
     energy: [],       // 에너지 사용량
-    buildings: [],    // {id,name,x,y,w,h} — 조감도와 설비를 이름으로 연결
+    buildings: [],    // {id,name,x,y,w,h,points:[{x,y}]} — 다각형 조감도 영역
     managers: [],     // 법정선임·유지관리 담당자 통합 대장
     notificationQueue: [], // 검사·교체 알림 승인/발송 기록
     settings: {
@@ -78,25 +78,65 @@
       b = b || {};
       var name = text(b.name).trim();
       var col = i % 4, row = Math.floor(i / 4);
+      var x = Number.isFinite(Number(b.x)) ? Number(b.x) : 4 + col * 24;
+      var y = Number.isFinite(Number(b.y)) ? Number(b.y) : 8 + row * 30;
+      var w = Number.isFinite(Number(b.w)) ? Number(b.w) : 20;
+      var h = Number.isFinite(Number(b.h)) ? Number(b.h) : 22;
+      var points = Array.isArray(b.points) ? b.points.map(function (p) {
+        return { x: Number(p && p.x), y: Number(p && p.y) };
+      }).filter(function (p) {
+        return Number.isFinite(p.x) && Number.isFinite(p.y)
+          && p.x >= 0 && p.x <= 100 && p.y >= 0 && p.y <= 100;
+      }) : [];
+      if (points.length < 3) points = [
+        { x: x, y: y }, { x: x + w, y: y },
+        { x: x + w, y: y + h }, { x: x, y: y + h }
+      ];
       var out = {
         id: b.id || buildingId(name),
         name: name,
-        x: Number.isFinite(Number(b.x)) ? Number(b.x) : 4 + col * 24,
-        y: Number.isFinite(Number(b.y)) ? Number(b.y) : 8 + row * 30,
-        w: Number.isFinite(Number(b.w)) ? Number(b.w) : 20,
-        h: Number.isFinite(Number(b.h)) ? Number(b.h) : 22
+        x: x, y: y, w: w, h: h, points: points
       };
       if (name) known[name] = true;
       return out;
     }).filter(function (b) { return b.name; });
 
     (d.equipments || []).forEach(function (e) {
+      var inspections = Array.isArray(e.inspections) ? e.inspections : [];
+      inspections = inspections.map(function (item, index) {
+        item = item || {};
+        var cycle = item.cycleMonths === '' || item.cycleMonths == null ? null : Number(item.cycleMonths);
+        var cost = item.cost === '' || item.cost == null ? null : Number(item.cost);
+        return {
+          id: item.id || (e.id || 'equipment') + '-inspection-' + (index + 1),
+          name: text(item.name).trim() || '정기검사',
+          lastDate: text(item.lastDate).trim(),
+          cycleMonths: Number.isFinite(cycle) && cycle > 0 ? cycle : null,
+          cost: Number.isFinite(cost) && cost >= 0 ? cost : null
+        };
+      });
+      if (!inspections.length && (e.lastInspect || e.cycleMonths || e.inspectCost !== undefined && e.inspectCost !== null)) {
+        inspections.push({
+          id: (e.id || 'equipment') + '-inspection-1', name: '정기검사',
+          lastDate: text(e.lastInspect).trim(),
+          cycleMonths: Number(e.cycleMonths) > 0 ? Number(e.cycleMonths) : null,
+          cost: e.inspectCost === '' || e.inspectCost == null ? null : Number(e.inspectCost)
+        });
+      }
+      e.inspections = inspections;
+      if (inspections.length) {
+        e.lastInspect = inspections[0].lastDate || '';
+        e.cycleMonths = inspections[0].cycleMonths;
+        e.inspectCost = inspections[0].cost;
+      }
       var name = text(e.building).trim();
       if (!name || known[name]) return;
       var i = d.buildings.length, col = i % 4, row = Math.floor(i / 4);
       d.buildings.push({
         id: buildingId(name), name: name,
-        x: 4 + col * 24, y: 8 + row * 30, w: 20, h: 22
+        x: 4 + col * 24, y: 8 + row * 30, w: 20, h: 22,
+        points: [{ x: 4 + col * 24, y: 8 + row * 30 }, { x: 24 + col * 24, y: 8 + row * 30 },
+          { x: 24 + col * 24, y: 30 + row * 30 }, { x: 4 + col * 24, y: 30 + row * 30 }]
       });
       known[name] = true;
     });
