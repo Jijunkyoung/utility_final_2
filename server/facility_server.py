@@ -445,10 +445,12 @@ def import_law(config: dict, doc: dict) -> dict:
 def prompt(kind: str, equipment: dict, text: str) -> str:
     if kind == "manual":
         schema = '{"summary":"","consumables":[{"name":"","cycleText":"","cycleMonths":null,"evidence":""}],"inspections":[{"name":"","cycleText":"","cycleMonths":null,"evidence":""}],"warnings":[]}'
+    elif kind == "law_question":
+        schema = '{"answer":"","laws":[{"law":"","article":"","requirement":"","evidence":"","sourceUrl":""}],"missingInformation":[],"warning":""}'
     else:
         schema = '{"rows":[{"law":"","requirement":"","equipmentField":"","equipmentValue":"","status":"충족|미충족|확인 필요|정보 부족","evidence":"","action":""}],"warning":""}'
     return (
-        "공장 유틸리티 설비 문서 검토 보조자 역할을 하세요. 문서에 없는 검사주기나 법적 판정을 "
+        "공장 유틸리티 설비 문서 검토 보조자 역할을 하세요. 제공 문서에 없는 조문·기준값·검사주기나 법적 판정을 "
         "추측하지 말고 모든 결과에 원문 근거를 넣으세요. JSON 외 문자는 반환하지 마세요.\n"
         f"설비정보: {json.dumps(equipment, ensure_ascii=False)}\n문서:\n{text[:60000]}\n반환형식:{schema}"
     )
@@ -762,6 +764,11 @@ class Handler(BaseHTTPRequestHandler):
                       (doc_id, doc.get("equipmentId", ""), doc.get("law", ""), doc.get("about", ""),
                        doc.get("sourceUrl", ""), doc.get("effectiveDate", ""), doc.get("content", ""),
                        json.dumps(doc, ensure_ascii=False), now()))
+                self.send_json(200, {"ok": True, "document": doc})
+                return
+            if parsed.path == "/api/laws/query":
+                if not self.role_guard("editor"): return
+                doc = import_law(load_config(), self.read_json())
                 self.send_json(200, {"ok": True, "document": doc})
                 return
             if parsed.path == "/api/analyze":

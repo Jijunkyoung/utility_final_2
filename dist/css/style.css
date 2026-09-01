@@ -108,6 +108,9 @@ td .calc{display:inline-block; margin-left:5px; font-size:10.5px; font-weight:70
 .stat{background:#eef2f6; border-radius:9px; padding:9px 14px; font-size:13.5px;}
 .stat b{font-size:17px; display:block; font-variant-numeric:tabular-nums;}
 footer{border-top:1px solid var(--line); padding:24px 0 40px; color:var(--sub); font-size:13px;}
+.sr-only{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
+.law-chat-card{margin-top:26px}.law-chat-card h2{margin:2px 0 5px}.law-chat-log{display:grid;gap:10px;max-height:360px;overflow-y:auto;margin:16px 0;padding:16px;border:1px solid var(--line);border-radius:10px;background:#f7f9fb;}
+.law-chat-message{max-width:min(800px,92%);padding:11px 13px;border-radius:10px;white-space:normal;line-height:1.6}.law-chat-message.user{justify-self:end;background:var(--brand);color:#fff}.law-chat-message.assistant{justify-self:start;background:#fff;border:1px solid var(--line)}.law-chat-message a{color:var(--accent);font-weight:700}.law-chat-message ul{padding-left:20px;margin:7px 0}.law-chat-form{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:end}.law-chat-form textarea{width:100%;min-height:82px;padding:11px;border:1px solid #b8c5d1;border-radius:9px;font:inherit;resize:vertical}.law-chat-form .btn{height:42px}.law-chat-card .note{margin-bottom:0}@media(max-width:640px){.law-chat-form{grid-template-columns:1fr}.law-chat-form .btn{width:100%}}
 
 /* ── 입력 폼 ────────────────────────────────────────────────────────
    칸이 스무 개쯤 되므로 자동 배치한다. 폭을 고정하면 좁은 화면에서 삐져나가고,

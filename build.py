@@ -144,11 +144,11 @@ PAGES["index.html"] = """
   <div class="btnrow"><button class="btn" id="seed">예시 자료 넣기</button></div>
 </div>
 
-<h2>지금 챙겨야 할 것</h2>
+<h2>시설 운영 현황</h2>
 <div class="stats" id="summary"></div>
 
 <div class="card">
-  <h3 style="font-size:16px;margin-bottom:4px">기한이 가까운 순서</h3>
+  <h3 style="font-size:16px;margin-bottom:4px">다가오는 점검·교체 일정</h3>
   <p class="sub">법정검사는 30일 전부터, 소모품 교체는 14일 전부터 알립니다.</p>
   <div class="tablewrap" style="max-height:none"><table id="due">
     <thead><tr><th>구분</th><th>설비</th><th>항목</th><th>기한</th><th>남은 일수</th><th>상태</th></tr></thead>
@@ -156,10 +156,25 @@ PAGES["index.html"] = """
 </div>
 
 <div class="card">
-  <h3 style="font-size:16px;margin-bottom:4px">확인이 필요한 것</h3>
+  <h3 style="font-size:16px;margin-bottom:4px">설비·법령 정보 보완 필요</h3>
   <p class="sub">법령을 오래 확인하지 않았거나, 법령을 대조할 값이 빠진 설비입니다.</p>
   <div id="review"></div>
 </div>
+
+<section class="card law-chat-card" aria-labelledby="law-chat-title">
+  <p class="eyebrow">저장 법령·국가법령정보센터 연계</p>
+  <h2 id="law-chat-title">법령 질의 도우미</h2>
+  <p class="sub">설비 종류와 용량 등 조건을 함께 질문하면 관련 법령 후보와 확인해야 할 기준을 안내합니다.</p>
+  <div id="law-chat-log" class="law-chat-log" aria-live="polite">
+    <div class="law-chat-message assistant">예: 우리 회사의 전기용량은 22,900 kW인데 안전관리자 선임기준이 어떻게 돼?</div>
+  </div>
+  <form id="law-chat-form" class="law-chat-form">
+    <label class="sr-only" for="law-question">법령 질문</label>
+    <textarea id="law-question" rows="3" required placeholder="설비 종류, 용량, 압력, 설치 장소 등 판단에 필요한 조건을 함께 적어 주세요."></textarea>
+    <button class="btn primary" type="submit">질문하기</button>
+  </form>
+  <div class="note"><b>법적 판단 보조 기능입니다.</b> 답변의 법령명·조문·시행일을 원문에서 최종 확인한 뒤 업무에 적용하세요.</div>
+</section>
 
 """
 
@@ -179,8 +194,8 @@ PAGES["guide.html"] = """
 
 <h2>메뉴별 기능</h2>
 <div class="guide-grid">
-  <article class="guide-card"><h3>개요</h3><p>기한 초과·임박 일정과 법령 확인이 필요한 설비를 한 화면에서 확인합니다.</p><ul><li>우선 처리할 검사·교체 일정 확인</li><li>사양 또는 법령 확인이 빠진 설비 확인</li></ul><a class="btn small-btn" href="index.html">개요 열기</a></article>
-  <article class="guide-card"><h3>설비</h3><p>설비 사양과 관련 자료를 설비 ID 기준으로 통합 관리합니다.</p><ul><li>설비 등록 및 복수 법정검사 입력</li><li>소모품·이력·매뉴얼·연관법령 관리</li><li>JSON·엑셀 내보내기</li></ul><a class="btn small-btn" href="equipment.html">설비 열기</a></article>
+  <article class="guide-card"><h3>개요</h3><p>기한 초과·임박 일정과 법령 확인이 필요한 설비를 한 화면에서 확인합니다.</p><ul><li>우선 처리할 검사·교체 일정 확인</li><li>사양 또는 법령 확인이 빠진 설비 확인</li><li>법령 질의 도우미로 관련 법령 후보 확인</li></ul><a class="btn small-btn" href="index.html">개요 열기</a></article>
+  <article class="guide-card"><h3>설비</h3><p>설비 사양과 관련 자료를 설비 ID 기준으로 통합 관리합니다.</p><ul><li>설비 등록 및 복수 법정검사 입력</li><li>소모품·이력·매뉴얼·연관법령 관리</li><li>Excel 양식 다운로드·가져오기 및 내보내기</li></ul><a class="btn small-btn" href="equipment.html">설비 열기</a></article>
   <article class="guide-card"><h3>담당자</h3><p>법정선임관리자와 유지관리자의 연락처·재직 상태를 한 번만 등록해 설비와 연결합니다.</p><ul><li>역할·부서·전화·메일 관리</li><li>담당 설비와 담당 해제 상태 확인</li></ul><a class="btn small-btn" href="managers.html">담당자 열기</a></article>
   <article class="guide-card"><h3>알림</h3><p>검사와 소모품 교체 예정일을 계산하고 담당자별 안내 문안을 만듭니다.</p><ul><li>D-day·기한 초과 확인</li><li>승인 대기함 등록 후 메일 발송 또는 복사</li></ul><a class="btn small-btn" href="alerts.html">알림 열기</a></article>
   <article class="guide-card"><h3>이력</h3><p>법정검사·소모품 교체·고장 AS 완료일과 실제 비용을 기록합니다.</p><ul><li>완료한 검사 항목을 직접 선택</li><li>최근 완료일·다음 예정일·실제 단가 자동 갱신</li></ul><a class="btn small-btn" href="history.html">이력 열기</a></article>
@@ -216,7 +231,8 @@ PAGES["equipment.html"] = """
 <div class="btnrow equipment-tools">
   <button class="btn" id="export">내보내기 (JSON)</button>
   <label class="btn" for="import-file">가져오기</label>
-  <input type="file" id="import-file" accept=".json">
+  <input type="file" id="import-file" accept=".json,.xlsx,.xls">
+  <button class="btn" id="equipment-template-xlsx">양식 다운로드</button>
   <button class="btn" id="export-xlsx">엑셀로 내보내기</button>
 </div>
 	<div class="tablewrap"><table id="eq-table">
@@ -308,7 +324,7 @@ PAGES["equipment.html"] = """
 	      <label style="grid-column:1/-1">내용 <input name="memo" required></label>
 	    </form>
 	    <div class="btnrow"><button class="btn primary" id="detail-history-save" type="button">이력 추가</button></div>
-	    <div class="tablewrap detail-table"><table id="detail-history"><thead><tr><th></th><th>일자</th><th>구분</th><th>내용</th><th>업체</th><th>금액</th></tr></thead><tbody></tbody></table></div>
+	    <div class="tablewrap detail-table"><table id="detail-history"><thead><tr><th></th><th>일자</th><th>구분</th><th>검사항목·주기</th><th>내용</th><th>업체</th><th>금액</th></tr></thead><tbody></tbody></table></div>
 	  </section>
 
 	  <section class="detail-panel" data-detail-panel="manuals" hidden>
@@ -460,7 +476,7 @@ PAGES["history.html"] = """
 
 <h2>이력 <span class="sub" id="h-count"></span></h2>
 <div class="tablewrap"><table id="h-table">
-  <thead><tr><th></th><th>일자</th><th>설비</th><th>구분</th><th>내용</th><th>업체</th><th>금액</th></tr></thead>
+  <thead><tr><th></th><th>일자</th><th>설비</th><th>구분</th><th>검사항목·주기</th><th>내용</th><th>업체</th><th>금액</th></tr></thead>
   <tbody></tbody></table></div>
 
 <h2>설비별 누계</h2>
