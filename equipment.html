@@ -60,7 +60,8 @@
 <div class="btnrow equipment-tools">
   <button class="btn" id="export">내보내기 (JSON)</button>
   <label class="btn" for="import-file">가져오기</label>
-  <input type="file" id="import-file" accept=".json">
+  <input type="file" id="import-file" accept=".json,.xlsx,.xls">
+  <button class="btn" id="equipment-template-xlsx">양식 다운로드</button>
   <button class="btn" id="export-xlsx">엑셀로 내보내기</button>
 </div>
 	<div class="tablewrap"><table id="eq-table">
@@ -152,7 +153,7 @@
 	      <label style="grid-column:1/-1">내용 <input name="memo" required></label>
 	    </form>
 	    <div class="btnrow"><button class="btn primary" id="detail-history-save" type="button">이력 추가</button></div>
-	    <div class="tablewrap detail-table"><table id="detail-history"><thead><tr><th></th><th>일자</th><th>구분</th><th>내용</th><th>업체</th><th>금액</th></tr></thead><tbody></tbody></table></div>
+	    <div class="tablewrap detail-table"><table id="detail-history"><thead><tr><th></th><th>일자</th><th>구분</th><th>검사항목·주기</th><th>내용</th><th>업체</th><th>금액</th></tr></thead><tbody></tbody></table></div>
 	  </section>
 
 	  <section class="detail-panel" data-detail-panel="manuals" hidden>

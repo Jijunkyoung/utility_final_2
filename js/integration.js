@@ -67,6 +67,19 @@
   function importLaw(settings, document) {
     return request(settings, '/api/laws/import', { method: 'POST', headers: jsonHeaders(settings), body: JSON.stringify(document) });
   }
+  function queryLaw(settings, law) {
+    return request(settings, '/api/laws/query', { method: 'POST', headers: jsonHeaders(settings),
+      body: JSON.stringify({ law: law }) }, 60000);
+  }
+  function askLaw(settings, question, candidates) {
+    return request(settings, '/api/analyze', { method: 'POST', headers: jsonHeaders(settings), body: JSON.stringify({
+      kind: 'law_question', equipment: { question: question },
+      text: (candidates || []).map(function (d) {
+        return '[법령] ' + (d.law || '') + '\n[연관 내용] ' + (d.about || '') + '\n[시행일] '
+          + (d.effectiveDate || '') + '\n[원문] ' + (d.content || '');
+      }).join('\n\n'), mode: settings.aiMode, allowExternalFallback: !!settings.allowExternalFallback
+    }) }, 180000);
+  }
   function saveAnalysis(settings, analysis) {
     return request(settings, '/api/analyses', { method: 'POST', headers: jsonHeaders(settings), body: JSON.stringify(analysis) });
   }
@@ -105,7 +118,7 @@
   }
 
   return { health: health, saveSettings: saveSettings, testStorage: testStorage,
-    upload: upload, analyze: analyze, saveLaw: saveLaw, importLaw: importLaw, saveAnalysis: saveAnalysis,
+    upload: upload, analyze: analyze, saveLaw: saveLaw, importLaw: importLaw, queryLaw: queryLaw, askLaw: askLaw, saveAnalysis: saveAnalysis,
     loadState: loadState, saveState: saveState, audit: audit, backup: backup, backups: backups,
     restore: restore, jobs: jobs, runJobs: runJobs, ocr: ocr,
     sendNotification: sendNotification, sameOriginServer: sameOriginServer };

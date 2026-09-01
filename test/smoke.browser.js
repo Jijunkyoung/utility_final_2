@@ -87,6 +87,14 @@ function serve(port) {
     await go('');
     ok(await page.isVisible('#seed'), '「예시 자료 넣기」 단추가 보인다');
     ok(await page.isVisible('#empty-hint'), '자료가 없다는 안내가 보인다');
+    ok((await page.textContent('main')).indexOf('시설 운영 현황') >= 0
+       && (await page.textContent('main')).indexOf('다가오는 점검·교체 일정') >= 0
+       && (await page.textContent('main')).indexOf('설비·법령 정보 보완 필요') >= 0,
+       '개요 소제목이 회사 운영 용어로 표시된다');
+    await page.fill('#law-question', '우리 회사 전기용량은 22900 kW인데 안전관리자 선임기준은?');
+    await page.click('#law-chat-form button[type=submit]');
+    ok((await page.textContent('#law-chat-log')).indexOf('전기안전관리법') >= 0,
+       '법령 질의 도우미가 전기 질문의 관련 법령 후보와 원문 링크를 안내한다');
 
     group('2. 예시 자료 한 번으로 네 가지가 들어간다');
     await page.click('#seed');
@@ -120,6 +128,13 @@ function serve(port) {
        '설비 목록에 건수가 나온다 (' + (await page.textContent('#eq-count')).trim() + ')');
     ok(await page.locator('#eq-table tbody tr').count() > 0, '설비 표에 줄이 있다');
     ok(await page.isVisible('#eq-create-open'), '설비 등록은 목록 위 버튼으로 보인다');
+    ok(await page.isVisible('#equipment-template-xlsx')
+       && (await page.getAttribute('#import-file', 'accept')).indexOf('.xlsx') >= 0,
+       'Excel 양식 다운로드와 Excel 가져오기를 제공한다');
+    var templateDownload = page.waitForEvent('download');
+    await page.click('#equipment-template-xlsx');
+    ok((await templateDownload).suggestedFilename() === 'facility-equipment-import-template.xlsx',
+       '설비·복수 검사항목 작성 양식을 다운로드한다');
     await page.click('#eq-create-open');
     ok(await page.isVisible('#eq-create'), '설비 등록 버튼을 누르면 입력 창이 열린다');
     ok(await page.locator('#eq-form [name="legalManagerId"] option').count() > 1
@@ -149,6 +164,28 @@ function serve(port) {
     ok(!/\d+\s*개월마다|\d+\s*년마다|주기\s*[:：]\s*\d/.test(hint),
        '법령 안내에 주기 숫자를 지어내지 않는다', hint.slice(0, 160));
     await page.click('#eq-create-close');
+
+    var importBase64 = await page.evaluate(function () {
+      var wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{
+        설비번호:'IMPORT-01', 설비명:'엑셀 가져오기 설비', 종류:'수변전설비', 위치:'시험동', 소모전력:'22900 kW'
+      }]), '설비등록양식');
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([
+        { 설비번호:'IMPORT-01', 검사명:'정기검사', 최근검사일:'2026-01-10', '주기(개월)':12, '비용(원)':100000 },
+        { 설비번호:'IMPORT-01', 검사명:'안전진단', 최근검사일:'2026-02-10', '주기(개월)':24, '비용(원)':200000 }
+      ]), '검사항목양식');
+      return XLSX.write(wb, { type:'base64', bookType:'xlsx' });
+    });
+    page.on('dialog', function (dialog) { dialog.accept(); });
+    await page.setInputFiles('#import-file', { name:'equipment-import.xlsx',
+      mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer:Buffer.from(importBase64, 'base64') });
+    await page.waitForFunction(function () {
+      return Store.load().equipments.some(function (e) { return e.code === 'IMPORT-01' && (e.inspections || []).length === 2; });
+    });
+    ok(await page.evaluate(function () {
+      var e = Store.load().equipments.find(function (x) { return x.code === 'IMPORT-01'; });
+      return e && e.name === '엑셀 가져오기 설비' && e.inspections[1].cycleMonths === 24;
+    }), 'Excel 설비 기본정보와 복수 검사항목을 함께 가져온다');
 
     group('3-1. 설비 상세 — 다섯 탭이 같은 설비 ID 자료를 저장한다');
     await page.locator('#eq-table [data-detail]').first().click();
@@ -285,6 +322,8 @@ function serve(port) {
     group('6. 이력 — 금액을 모르면 「미상」');
     await go('history.html');
     ok(await page.locator('#h-table tbody tr').count() > 0, '이력 표에 줄이 있다');
+    ok((await page.textContent('#h-table')).indexOf('개월') >= 0,
+       '법정검사 이력에 검사주기가 함께 표시된다');
     var hsum = (await page.textContent('#h-sum')).replace(/\s+/g, ' ');
     ok(hsum.length > 0, '설비별 누계가 나온다', hsum.slice(0, 100));
     var target = await page.evaluate(function () {

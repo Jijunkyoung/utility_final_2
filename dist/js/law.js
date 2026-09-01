@@ -90,6 +90,41 @@
     });
   }
 
+  /** 개요의 법령 질의에서 질문 문구로 관련 법령 후보를 좁힌다. */
+  function questionCandidates(question, documents) {
+    var q = value(question).toLowerCase(), out = [], seen = {};
+    function add(law, about, sourceUrl, content, effectiveDate) {
+      if (!law || seen[law]) return;
+      seen[law] = true;
+      out.push({ law: law, about: about || '', sourceUrl: sourceUrl || SEARCH + encodeURIComponent(law),
+        content: content || '', effectiveDate: effectiveDate || '' });
+    }
+    var rules = [
+      [/전기|수전|수배전|전력|kw|kva/, [['전기안전관리법', '전기안전관리자 선임·전기설비 검사 기준']]],
+      [/보일러|열사용|증기/, [['에너지이용 합리화법', '검사대상기기 검사·조종자 선임 기준']]],
+      [/냉동|냉매|고압가스|압력용기/, [['고압가스 안전관리법', '시설 허가·검사·안전관리자 기준'], ['산업안전보건법', '압력용기 안전검사 해당 여부']]],
+      [/도시가스|가스시설/, [['도시가스사업법', '가스 안전관리자 선임·검사 기준'], ['고압가스 안전관리법', '고압가스 시설에 해당하는 경우']]],
+      [/승강기|엘리베이터/, [['승강기 안전관리법', '안전관리자·정기검사 기준']]],
+      [/소방|화재/, [['화재의 예방 및 안전관리에 관한 법률', '소방안전관리자 선임·자체점검 기준'], ['소방시설 설치 및 관리에 관한 법률', '소방시설 설치·관리 기준']]],
+      [/폐수|수질/, [['물환경보전법', '배출시설·자가측정·환경기술인 기준']]],
+      [/위험물/, [['위험물안전관리법', '안전관리자 선임·정기점검 기준']]],
+      [/대기|배출시설/, [['대기환경보전법', '배출시설 신고·자가측정 기준']]]
+    ];
+    rules.forEach(function (rule) {
+      if (rule[0].test(q)) rule[1].forEach(function (x) { add(x[0], x[1]); });
+    });
+    (documents || []).forEach(function (d) {
+      var hay = [d.law, d.about, d.content].join(' ').toLowerCase();
+      var tokens = q.split(/[^0-9a-zA-Z가-힣]+/).filter(function (x) { return x.length >= 2; });
+      if (tokens.some(function (x) { return hay.indexOf(x) >= 0; })) {
+        var existing = out.find(function (x) { return x.law === d.law; });
+        if (existing) Object.assign(existing, d);
+        else add(d.law, d.about, d.sourceUrl, d.content, d.effectiveDate);
+      }
+    });
+    return out;
+  }
+
   function value(v) { return v == null ? '' : String(v).trim(); }
 
   /**
@@ -179,6 +214,7 @@
 
   return {
     KINDS: KINDS, lawsFor: lawsFor, lawsForEquipment: lawsForEquipment,
+    questionCandidates: questionCandidates,
     latestReview: latestReview, needsReview: needsReview, SEARCH: SEARCH
   };
 });

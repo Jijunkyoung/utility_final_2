@@ -137,6 +137,18 @@
     return [];
   }
 
+  function inspectionForHistory(history) {
+    if (!history || history.kind !== '법정검사') return null;
+    var list = inspectionsOf(eqById(history.equipmentId));
+    return list.find(function (item) { return item.id === history.inspectionId; }) || list[0] || null;
+  }
+
+  function inspectionLabel(inspection) {
+    if (!inspection) return '<span class="sub">—</span>';
+    return esc(inspection.name || '정기검사') + '<br><span class="sub">'
+      + (Number(inspection.cycleMonths) > 0 ? esc(inspection.cycleMonths) + '개월' : '주기 미입력') + '</span>';
+  }
+
   function syncPrimaryInspection(e) {
     var first = inspectionsOf(e)[0];
     e.lastInspect = first ? first.lastDate || '' : '';
@@ -238,7 +250,75 @@
   function initIndex() {
     var seedBtn = $('#seed');
     if (seedBtn) seedBtn.addEventListener('click', function () { seed(); location.reload(); });
+    var lawForm = $('#law-chat-form');
+    if (lawForm) lawForm.addEventListener('submit', askLawQuestion);
     renderIndex();
+  }
+
+  function appendLawChat(role, html) {
+    var log = $('#law-chat-log'); if (!log) return null;
+    var message = document.createElement('div');
+    message.className = 'law-chat-message ' + role;
+    message.innerHTML = html;
+    log.appendChild(message); log.scrollTop = log.scrollHeight;
+    return message;
+  }
+
+  function lawCandidateAnswer(question, candidates) {
+    if (!candidates.length) {
+      return '<b>질문만으로 관련 법령을 좁히지 못했습니다.</b><br>설비 종류, 정격용량, 전압·압력, 설치 장소와 용도를 함께 입력해 주세요. '
+        + '<a href="' + esc(L.SEARCH + encodeURIComponent(question)) + '" target="_blank" rel="noopener">국가법령정보센터에서 검색</a>';
+    }
+    return '<b>먼저 확인할 법령 후보입니다.</b><ul>' + candidates.map(function (d) {
+      var url = safeHttpUrl(d.sourceUrl) || L.SEARCH + encodeURIComponent(d.law);
+      return '<li><a href="' + esc(url) + '" target="_blank" rel="noopener">' + esc(d.law) + '</a> — '
+        + esc(d.about || '질문과 관련된 적용 기준 확인')
+        + (d.effectiveDate ? ' <span class="sub">(기준일 ' + esc(d.effectiveDate) + ')</span>' : '') + '</li>';
+    }).join('') + '</ul><b>정확한 선임 여부를 판단하려면</b> 설비 구분, 수전 방식·전압, 계약전력과 설비용량의 의미, 설치 장소를 원문의 적용 범위와 대조해야 합니다. 저장된 원문이나 AI 연결이 없을 때는 기준 숫자를 추측해서 제시하지 않습니다.';
+  }
+
+  function lawAiAnswer(result, candidates) {
+    var r = result || {}, parts = [];
+    if (r.answer) parts.push('<p>' + esc(r.answer) + '</p>');
+    if (Array.isArray(r.laws) && r.laws.length) parts.push('<ul>' + r.laws.map(function (x) {
+      var match = candidates.find(function (d) { return d.law === x.law; }) || {};
+      var url = safeHttpUrl(x.sourceUrl || match.sourceUrl) || L.SEARCH + encodeURIComponent(x.law || '');
+      return '<li><a href="' + esc(url) + '" target="_blank" rel="noopener">' + esc(x.law || '관련 법령') + '</a>'
+        + (x.article ? ' ' + esc(x.article) : '') + ' — ' + esc(x.requirement || '')
+        + (x.evidence ? '<br><span class="sub">근거: ' + esc(x.evidence) + '</span>' : '') + '</li>';
+    }).join('') + '</ul>');
+    if (Array.isArray(r.missingInformation) && r.missingInformation.length) {
+      parts.push('<p><b>추가 확인:</b> ' + esc(r.missingInformation.join(' · ')) + '</p>');
+    }
+    if (r.warning) parts.push('<p class="sub">' + esc(r.warning) + '</p>');
+    return parts.join('') || lawCandidateAnswer('', candidates);
+  }
+
+  function askLawQuestion(ev) {
+    ev.preventDefault();
+    var input = $('#law-question'), question = input.value.trim(); if (!question) return;
+    appendLawChat('user', esc(question)); input.value = '';
+    var candidates = L.questionCandidates(question, db.lawDocuments || []);
+    var pending = appendLawChat('assistant', '관련 법령과 저장된 원문을 확인하고 있습니다…');
+    var fetchCurrent = serverConfigured() && db.settings.lawApiOc && candidates.length
+      ? Promise.all(candidates.map(function (candidate) {
+          if (String(candidate.content || '').trim()) return candidate;
+          return I.queryLaw(db.settings, candidate.law).then(function (response) {
+            return response.ok && response.document ? Object.assign(candidate, response.document) : candidate;
+          });
+        })) : Promise.resolve(candidates);
+    fetchCurrent.then(function (current) {
+      var canAnalyze = serverConfigured() && db.settings.aiMode && db.settings.aiMode !== 'rules'
+        && current.some(function (d) { return String(d.content || '').trim(); });
+      if (!canAnalyze) { pending.innerHTML = lawCandidateAnswer(question, current); return; }
+      return I.askLaw(db.settings, question, current).then(function (response) {
+        pending.innerHTML = response.ok ? lawAiAnswer(response.result, current)
+          : lawCandidateAnswer(question, current) + '<p class="sub">AI 상세 분석 연결 실패: ' + esc(response.error || '서버 설정 확인 필요') + '</p>';
+      });
+    }).catch(function (error) {
+      pending.innerHTML = lawCandidateAnswer(question, candidates)
+        + '<p class="sub">최신 법령 조회 실패: ' + esc(error && error.message || error) + '</p>';
+    });
   }
 
   function renderIndex() {
@@ -366,7 +446,8 @@
     });
 
     $('#export').addEventListener('click', exportJson);
-    $('#import-file').addEventListener('change', importJson);
+    $('#import-file').addEventListener('change', importEquipmentFile);
+    $('#equipment-template-xlsx').addEventListener('click', downloadEquipmentTemplate);
     $('#export-xlsx').addEventListener('click', exportEquipmentXlsx);
 
     $('#detail-close').addEventListener('click', closeEquipmentDetail);
@@ -659,10 +740,11 @@
   function renderDetailHistory(e) {
     var list = St.forEquipment(db.history, e.id).sort(function (a, b) { return a.date < b.date ? 1 : -1; });
     $('#detail-history tbody').innerHTML = list.length ? list.map(function (h) {
+      var inspection = inspectionForHistory(h);
       return '<tr><td><button class="btn small-btn" data-history-del="' + esc(h.id) + '">삭제</button></td>'
-        + '<td class="mono">' + esc(h.date) + '</td><td>' + esc(h.kind) + '</td><td>' + esc(h.memo) + '</td>'
+        + '<td class="mono">' + esc(h.date) + '</td><td>' + esc(h.kind) + '</td><td>' + inspectionLabel(inspection) + '</td><td>' + esc(h.memo) + '</td>'
         + '<td>' + esc(h.vendor) + '</td><td class="num">' + (h.cost === null ? '미상' : won(h.cost)) + '</td></tr>';
-    }).join('') : '<tr><td colspan="6" class="sub">등록된 이력이 없습니다.</td></tr>';
+    }).join('') : '<tr><td colspan="7" class="sub">등록된 이력이 없습니다.</td></tr>';
     $$('#detail-history [data-history-del]').forEach(function (b) {
       b.addEventListener('click', function () {
         db.history = db.history.filter(function (x) { return x.id !== b.getAttribute('data-history-del'); });
@@ -1603,15 +1685,17 @@
     var list = db.history.slice().sort(function (a, b) { return a.date < b.date ? 1 : -1; });
     $('#h-count').textContent = list.length + '건';
     $('#h-table tbody').innerHTML = list.length ? list.map(function (h) {
+      var inspection = inspectionForHistory(h);
       return '<tr>'
         + '<td><button class="btn" data-del="' + esc(h.id) + '" style="min-height:26px;padding:0 8px;font-size:12px">삭제</button></td>'
         + '<td class="mono">' + esc(h.date) + '</td>'
         + '<td>' + esc(eqName(h.equipmentId)) + '</td>'
         + '<td>' + esc(h.kind) + '</td>'
+        + '<td>' + inspectionLabel(inspection) + '</td>'
         + '<td>' + esc(h.memo) + '</td>'
         + '<td>' + esc(h.vendor) + '</td>'
         + '<td class="num">' + (h.cost === null ? '<span class="sub">미상</span>' : won(h.cost)) + '</td></tr>';
-    }).join('') : '<tr><td colspan="7" class="sub">이력이 없습니다.</td></tr>';
+    }).join('') : '<tr><td colspan="8" class="sub">이력이 없습니다.</td></tr>';
 
     $$('#h-table [data-del]').forEach(function (b) {
       b.addEventListener('click', function () {
@@ -2318,9 +2402,15 @@
              'facility-' + today() + '.json');
   }
 
-  function importJson(ev) {
+  function importEquipmentFile(ev) {
     var f = ev.target.files && ev.target.files[0];
     if (!f) return;
+    if (/\.json$/i.test(f.name)) importJsonFile(f, ev.target);
+    else if (/\.xlsx?$/i.test(f.name)) importEquipmentXlsx(f, ev.target);
+    else { alert('JSON 또는 Excel(.xlsx, .xls) 파일을 선택해 주세요.'); ev.target.value = ''; }
+  }
+
+  function importJsonFile(f, input) {
     f.text().then(function (t) {
       var d;
       try { d = JSON.parse(t); } catch (e) { alert('JSON 을 읽지 못했습니다: ' + e.message); return; }
@@ -2329,8 +2419,95 @@
         + ' · 이력 ' + ((d.history || []).length) + '건\n계속할까요?')) return;
       Object.keys(St.EMPTY).forEach(function (k) { db[k] = d[k] === undefined ? St.EMPTY[k] : d[k]; });
       if (persist()) location.reload();
-    });
-    ev.target.value = '';
+    }).finally(function () { input.value = ''; });
+  }
+
+  function cleanNumber(value) {
+    var raw = String(value == null ? '' : value).replace(/,/g, '').trim();
+    if (!raw) return null;
+    var n = Number(raw); return Number.isFinite(n) ? n : null;
+  }
+
+  function cleanDate(value) {
+    var raw = String(value == null ? '' : value).trim();
+    if (!raw) return '';
+    var m = /^(\d{4})[-./](\d{1,2})[-./](\d{1,2})/.exec(raw);
+    if (m) return m[1] + '-' + String(Number(m[2])).padStart(2, '0') + '-' + String(Number(m[3])).padStart(2, '0');
+    var serial = Number(raw);
+    if (Number.isFinite(serial) && serial > 20000 && XLSX.SSF && XLSX.SSF.parse_date_code) {
+      var d = XLSX.SSF.parse_date_code(serial);
+      if (d) return d.y + '-' + String(d.m).padStart(2, '0') + '-' + String(d.d).padStart(2, '0');
+    }
+    return raw;
+  }
+
+  function templateSheet(headers) { return XLSX.utils.aoa_to_sheet([headers]); }
+
+  function downloadEquipmentTemplate() {
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, templateSheet([
+      '설비번호','설비명','종류','모델명','제조사','용량','유량','압력','소모전력','냉난방능력',
+      '기타사양','위치','세부위치','설치일','법정선임관리자','유지관리자','유지관리자메일','법령확인일','비고'
+    ]), '설비등록양식');
+    XLSX.utils.book_append_sheet(wb, templateSheet(['설비번호','검사명','최근검사일','주기(개월)','비용(원)']), '검사항목양식');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+      ['작성 항목','안내'],
+      ['설비등록양식','설비번호와 설비명은 필수입니다. 기존 설비번호를 입력하면 해당 설비 기본정보를 갱신합니다.'],
+      ['검사항목양식','같은 설비번호로 여러 줄을 작성하면 복수 법정검사 항목으로 등록됩니다.'],
+      ['날짜','YYYY-MM-DD 형식으로 입력하세요.'],
+      ['종류','승강기, 수변전설비, 비상발전기, 보일러, 압력용기, 냉동기, 공조기, 소방시설 등 또는 직접 입력']
+    ]), '작성안내');
+    XLSX.writeFile(wb, 'facility-equipment-import-template.xlsx');
+  }
+
+  function importEquipmentXlsx(file, input) {
+    file.arrayBuffer().then(function (buffer) {
+      var wb = XLSX.read(buffer, { type: 'array', cellDates: false });
+      var equipmentSheet = wb.Sheets['설비등록양식'] || wb.Sheets[wb.SheetNames[0]];
+      var inspectionSheet = wb.Sheets['검사항목양식'];
+      var rows = equipmentSheet ? XLSX.utils.sheet_to_json(equipmentSheet, { defval: '', raw: false }) : [];
+      rows = rows.filter(function (r) { return String(r['설비번호'] || r['설비명'] || '').trim(); });
+      if (!rows.length) throw new Error('설비등록양식에 설비번호와 설비명을 입력해 주세요.');
+      var codes = {}, duplicates = [];
+      rows.forEach(function (r) {
+        var code = String(r['설비번호'] || '').trim();
+        if (!code || !String(r['설비명'] || '').trim()) throw new Error('모든 설비에 설비번호와 설비명이 필요합니다.');
+        if (codes[code]) duplicates.push(code); codes[code] = true;
+      });
+      if (duplicates.length) throw new Error('설비번호가 중복되었습니다: ' + duplicates.join(', '));
+      var inspectionRows = inspectionSheet ? XLSX.utils.sheet_to_json(inspectionSheet, { defval: '', raw: false }) : [];
+      var byCode = {};
+      inspectionRows.forEach(function (r) {
+        var code = String(r['설비번호'] || '').trim(), name = String(r['검사명'] || '').trim();
+        if (!code && !name) return;
+        if (!code || !name) throw new Error('검사항목양식에는 설비번호와 검사명이 모두 필요합니다.');
+        (byCode[code] = byCode[code] || []).push({ id: St.newId('i'), name: name,
+          lastDate: cleanDate(r['최근검사일']), cycleMonths: cleanNumber(r['주기(개월)']), cost: cleanNumber(r['비용(원)']) });
+      });
+      var existingCount = rows.filter(function (r) {
+        var code = String(r['설비번호']).trim(); return db.equipments.some(function (e) { return e.code === code; });
+      }).length;
+      if (!confirm('설비 ' + rows.length + '건을 가져옵니다.\n신규 ' + (rows.length - existingCount)
+        + '건 · 기존 갱신 ' + existingCount + '건\n계속할까요?')) return;
+      rows.forEach(function (r) {
+        var code = String(r['설비번호']).trim();
+        var e = db.equipments.find(function (item) { return item.code === code; }) || { id: St.newId('eq') };
+        Object.assign(e, { code: code, name: String(r['설비명']).trim(), kind: String(r['종류'] || '').trim(),
+          model: String(r['모델명'] || '').trim(), manufacturer: String(r['제조사'] || '').trim(),
+          capacity: String(r['용량'] || '').trim(), flow: String(r['유량'] || '').trim(), pressure: String(r['압력'] || '').trim(),
+          power: String(r['소모전력'] || '').trim(), hvac: String(r['냉난방능력'] || '').trim(), spec: String(r['기타사양'] || '').trim(),
+          building: String(r['위치'] || '').trim(), place: String(r['세부위치'] || '').trim(), installedAt: cleanDate(r['설치일']),
+          legalMgr: String(r['법정선임관리자'] || '').trim(), mgr: String(r['유지관리자'] || '').trim(),
+          mgrEmail: String(r['유지관리자메일'] || '').trim(), lawCheckedAt: cleanDate(r['법령확인일']), note: String(r['비고'] || '').trim() });
+        if (byCode[code]) e.inspections = byCode[code];
+        else if (!Array.isArray(e.inspections)) e.inspections = [];
+        syncPrimaryInspection(e); ensureBuilding(e.building);
+        if (db.equipments.indexOf(e) < 0) db.equipments.push(e);
+      });
+      if (persist()) { renderEquipment(); alert('설비 ' + rows.length + '건을 가져왔습니다.'); }
+    }).catch(function (error) {
+      alert('Excel 양식을 읽지 못했습니다: ' + (error && error.message || error));
+    }).finally(function () { input.value = ''; });
   }
 
   function sheet(rows, name, file) {

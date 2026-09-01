@@ -32,6 +32,12 @@ class FacilityServerTest(unittest.TestCase):
         self.assertEqual(data["sharedPath"], str(share))
         self.assertEqual(server.DEFAULTS["apiToken"], "")
 
+    def test_law_question_prompt_requires_evidence_and_missing_information(self):
+        value = server.prompt("law_question", {"question": "전기 안전관리자 선임기준?"}, "전기안전관리법 원문")
+        self.assertIn('"laws"', value)
+        self.assertIn('"missingInformation"', value)
+        self.assertIn("추측하지 말고", value)
+
     def test_database_is_created_in_shared_root(self):
         share = self.root / "share"
         server.save_config({"sharedPath": str(share)})

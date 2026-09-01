@@ -286,6 +286,14 @@ ok(typeof I.health === 'function' && typeof I.analyze === 'function'
    && typeof I.loadState === 'function' && typeof I.saveState === 'function' && typeof I.backup === 'function'
    && typeof I.restore === 'function' && typeof I.runJobs === 'function' && typeof I.ocr === 'function',
    '사내 서버의 공용 DB·백업·공유폴더·AI 연결 함수를 제공한다');
+ok(typeof I.queryLaw === 'function' && typeof I.askLaw === 'function',
+   '법령 최신본 조회와 근거 기반 질의 함수를 제공한다');
+let questionLaws = L.questionCandidates('우리 회사 전기용량은 22900 kW인데 안전관리자 선임기준은?');
+ok(questionLaws.some(x => x.law === '전기안전관리법'),
+   '전기용량·안전관리자 질문에서 전기안전관리법을 우선 후보로 찾는다');
+questionLaws = L.questionCandidates('냉동기 압력 기준을 알려줘', [{ law: '사내 저장 법령', about: '냉동기 압력', content: '저장 원문' }]);
+ok(questionLaws.some(x => x.law === '사내 저장 법령' && x.content === '저장 원문'),
+   '질문과 관련된 내부 저장 법령 원문을 후보에 함께 넣는다');
 
 /* ── ⑦ 에너지 사용량 읽기 ────────────────────────────────────────── */
 
