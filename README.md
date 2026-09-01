@@ -8,7 +8,7 @@
 
 ---
 
-## 화면 아홉 개
+## 화면 열 개
 
 | 화면 | 하는 일 |
 |---|---|
@@ -21,6 +21,7 @@
 | **에너지** | 고지서 PDF·엑셀에서 사용량 추출 → 그래프 → 엑셀 |
 | **조감도** | 조감도 위에 건물 다각형을 그리고, 건물을 눌러 해당 설비 보기 |
 | **설정** | 사내 공유폴더·공용 DB 동기화·백업, 내부 서버, 로컬 AI, 외부 API, 국가법령정보센터 API 연결 |
+| **이용안내** | 각 메뉴의 목적·주요 기능·기본 사용 순서와 담당자 확인 원칙 |
 
 자동 점검은 Windows 작업 스케줄러에서 실행할 수 있으며 검사·소모품 D-30과 법령 최신본 확인 결과를
 승인 대기함에 추가합니다. 스캔 PDF는 서버에 승인된 OCR이 설정된 경우에만 보조 추출을 사용합니다.
@@ -142,8 +143,8 @@ node ../hd-04/scripts/probe.mjs /hd-project15/ /hd-project15/energy.html …
 node test/logic.test.js     # 날짜·법령·매뉴얼·공용 저장·에너지 규칙 검사 (108개)
 python3 test/jobs.test.py   # 자동 알림·법령 변경 기록 검사 (3개)
 python3 test/server.test.py # 공유 DB 충돌·백업·복원·권한·SMTP 검사 (13개)
-node test/smoke.browser.js  # 아홉 화면과 주요 흐름을 실제로 띄운다 (71개)
-python3 build.py            # 페이지 아홉 개를 다시 굽는다
+node test/smoke.browser.js  # 열 화면과 주요 흐름을 실제로 띄운다
+python3 build.py            # 페이지 열 개를 다시 굽는다
 ```
 
 둘 다 CI(`.github/workflows/test.yml`)에서 자동으로 돕니다. `build.py` 는 다시 구운
