@@ -1,4 +1,4 @@
-/* 브라우저에 실제로 띄워 아홉 장이 그려지는지 본다.
+/* 브라우저에 실제로 띄워 열 장이 그려지는지 본다.
  *
  *   node test/smoke.browser.js
  *
@@ -7,7 +7,7 @@
  * 파일을 읽어서는 안 잡힌다 — 실제로 띄워 봐야 잡힌다.
  *
  * 「예시 자료 넣기」 한 번이 설비·소모품·이력·에너지를 모두 넣으므로,
- * 그것을 누르고 아홉 장을 차례로 도는 것이 가장 넓게 훑는 길이다.
+ * 그것을 누르고 열 장을 차례로 도는 것이 가장 넓게 훑는 길이다.
  * 자료가 localStorage 에 있으므로 **같은 컨텍스트를 계속 쓴다.**
  *
  * playwright 가 없으면 조용히 건너뛴다. 이것 하나 때문에 다른 테스트가
@@ -359,6 +359,15 @@ function serve(port) {
     ok(await page.locator('#campus-image').count() === 1 && await page.locator('#building-editor tbody tr').count() === bldgs,
        '조감도 배경 이미지와 건물 다각형을 화면에서 편집할 수 있다');
     ok(await page.isVisible('#building-draw-start'), '건물 추가 버튼으로 새 다각형 그리기를 시작할 수 있다');
+
+    group('9-1. 이용안내 — 각 메뉴 기능을 한 화면에서 설명한다');
+    await go('guide.html');
+    ok(await page.locator('.guide-card').count() === 10, '아홉 메뉴와 확인 원칙을 각각 설명한다');
+    ok((await page.textContent('main')).indexOf('검사주기는 설비 사양과 최신 법령 원문으로 최종 확인') >= 0,
+       '자동 처리 범위와 담당자 확인 원칙을 안내한다');
+    ok((await page.textContent('main')).indexOf('미완료·환경 의존사항') >= 0
+       && await page.locator('.guide-dependencies tbody tr').count() === 6,
+       '이용안내 하단에 운영 환경 의존사항과 필요한 조치를 표시한다');
 
     group('10. 좁은 화면에서 가로로 넘치지 않는다');
     await go('');

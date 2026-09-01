@@ -41,6 +41,8 @@ MENU = [
      "건물을 누르면 그 건물에 설치된 설비와 사양을 봅니다."),
     ("settings.html",  "설정",   "저장소·AI 연결 설정",
      "사내 공유폴더와 로컬 AI·외부 API 연결을 설정하고 권한을 시험합니다."),
+    ("guide.html",     "이용안내", "이용안내",
+     "각 메뉴에서 무엇을 할 수 있는지와 기본 사용 순서를 안내합니다."),
 ]
 
 HEAD = """<!doctype html>
@@ -159,14 +161,49 @@ PAGES["index.html"] = """
   <div id="review"></div>
 </div>
 
-<h2>이 도구가 하는 일과 하지 않는 일</h2>
-<div class="note">
-  <p style="margin:0 0 8px"><b>합니다</b> — 설비 대장, 검사·교체 시기 계산, 이력과 금액 기록,
-     차년도 비용 예측, 고지서 PDF에서 사용량 뽑기, 건물별 설비 조회.</p>
-  <p style="margin:0"><b>하지 않습니다</b> — 법령 자동 조회와 메일 자동 발송.
-     둘 다 서버와 인증키가 필요하고 사내 폐쇄망에서는 나갈 수 없습니다.
-     대신 <b>확인해야 할 것을 목록으로 뽑아</b> 주고 법령 검색 링크를 겁니다.</p>
+"""
+
+# ─────────────────────────────────────────────────────────── 이용안내
+PAGES["guide.html"] = """
+<div class="guide-intro card">
+  <div><p class="eyebrow">처음 사용하는 분을 위한 안내</p>
+    <h2>설비 등록부터 알림·예산까지</h2>
+    <p>설비와 담당자를 먼저 등록하면 검사·소모품 일정, 이력, 비용, 에너지와 조감도가 같은 자료를 기준으로 연결됩니다.</p></div>
+  <ol class="guide-flow">
+    <li><b>담당자 등록</b><span>연락처와 역할 입력</span></li>
+    <li><b>설비 등록</b><span>사양·검사·매뉴얼 입력</span></li>
+    <li><b>일정 관리</b><span>알림·이력·비용 확인</span></li>
+    <li><b>운영 확장</b><span>에너지·법령·조감도 활용</span></li>
+  </ol>
 </div>
+
+<h2>메뉴별 기능</h2>
+<div class="guide-grid">
+  <article class="guide-card"><h3>개요</h3><p>기한 초과·임박 일정과 법령 확인이 필요한 설비를 한 화면에서 확인합니다.</p><ul><li>우선 처리할 검사·교체 일정 확인</li><li>사양 또는 법령 확인이 빠진 설비 확인</li></ul><a class="btn small-btn" href="index.html">개요 열기</a></article>
+  <article class="guide-card"><h3>설비</h3><p>설비 사양과 관련 자료를 설비 ID 기준으로 통합 관리합니다.</p><ul><li>설비 등록 및 복수 법정검사 입력</li><li>소모품·이력·매뉴얼·연관법령 관리</li><li>JSON·엑셀 내보내기</li></ul><a class="btn small-btn" href="equipment.html">설비 열기</a></article>
+  <article class="guide-card"><h3>담당자</h3><p>법정선임관리자와 유지관리자의 연락처·재직 상태를 한 번만 등록해 설비와 연결합니다.</p><ul><li>역할·부서·전화·메일 관리</li><li>담당 설비와 담당 해제 상태 확인</li></ul><a class="btn small-btn" href="managers.html">담당자 열기</a></article>
+  <article class="guide-card"><h3>알림</h3><p>검사와 소모품 교체 예정일을 계산하고 담당자별 안내 문안을 만듭니다.</p><ul><li>D-day·기한 초과 확인</li><li>승인 대기함 등록 후 메일 발송 또는 복사</li></ul><a class="btn small-btn" href="alerts.html">알림 열기</a></article>
+  <article class="guide-card"><h3>이력</h3><p>법정검사·소모품 교체·고장 AS 완료일과 실제 비용을 기록합니다.</p><ul><li>완료한 검사 항목을 직접 선택</li><li>최근 완료일·다음 예정일·실제 단가 자동 갱신</li></ul><a class="btn small-btn" href="history.html">이력 열기</a></article>
+  <article class="guide-card"><h3>비용</h3><p>등록된 검사·교체주기와 단가를 바탕으로 차년도 예상 비용을 계산합니다.</p><ul><li>검사·소모품 구분 합계</li><li>물가상승률·예비비 반영</li><li>예산 자료 엑셀 내보내기</li></ul><a class="btn small-btn" href="cost.html">비용 열기</a></article>
+  <article class="guide-card"><h3>에너지</h3><p>전기·수도·가스·압축공기 사용량을 월별로 정리합니다.</p><ul><li>PDF·엑셀·붙여넣기 자료 읽기</li><li>에너지원별 그래프 4개 표시</li><li>정리 결과 엑셀 내보내기</li></ul><a class="btn small-btn" href="energy.html">에너지 열기</a></article>
+  <article class="guide-card"><h3>조감도</h3><p>조감도 위에 건물 외곽을 다각형으로 그리고 건물별 설비를 조회합니다.</p><ul><li>배경 이미지 선택</li><li>건물 추가·다시 그리기·이름 변경</li><li>건물 선택 후 설치 설비 확인</li></ul><a class="btn small-btn" href="map.html">조감도 열기</a></article>
+  <article class="guide-card"><h3>설정</h3><p>사내 저장소, 자동 점검과 승인된 AI·OCR·법령 API 연결을 관리합니다.</p><ul><li>공유폴더·공용 DB·백업 복원</li><li>로컬 AI 또는 외부 API 설정</li><li>자동 점검 실행 내역 확인</li></ul><a class="btn small-btn" href="settings.html">설정 열기</a></article>
+  <article class="guide-card guide-warning"><h3>확인 원칙</h3><p>자동 분석은 담당자의 검토를 돕는 기능이며 법적 적합 여부를 확정하지 않습니다.</p><ul><li>검사주기는 설비 사양과 최신 법령 원문으로 최종 확인</li><li>외부 전송 전 사내 보안정책과 승인 여부 확인</li><li>메일은 승인 대기함에서 수신자와 내용을 확인한 뒤 발송</li></ul></article>
+</div>
+
+<section class="card guide-dependencies">
+  <p class="eyebrow">운영 전 확인</p><h2>미완료·환경 의존사항</h2>
+  <p class="sub">프로그램 기능은 준비되어 있지만 아래 항목은 실제 회사 PC·네트워크·자료와 보안 승인이 있어야 완료됩니다.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>항목</th><th>필요한 조치</th><th>현재 처리</th></tr></thead><tbody>
+      <tr><td><b>실제 메일 발송</b></td><td>사내 SMTP 주소·계정과 발송 권한을 설정합니다.</td><td>승인 대기함과 수동 복사 기능 사용 가능</td></tr>
+      <tr><td><b>OCR·법령·외부 AI</b></td><td>회사 보안 승인 후 API 주소와 인증정보를 서버에만 설정합니다.</td><td>미설정 또는 오류 항목만 건너뛰고 기록</td></tr>
+      <tr><td><b>공유폴더 저장</b></td><td>운영 PC에서 실제 공유폴더 경로와 읽기·쓰기 권한을 확인합니다.</td><td>연결 전 자료는 브라우저에 임시 저장</td></tr>
+      <tr><td><b>현장 자료</b></td><td>실제 설비·담당자·매뉴얼·검사·고지서와 캠퍼스 조감도 이미지를 등록합니다.</td><td>샘플 자료 또는 빈 대장으로 기능 확인 가능</td></tr>
+      <tr><td><b>자동 점검 실행</b></td><td>Windows 작업 스케줄러에 <code>server/run_jobs.bat</code>를 매일 실행하도록 등록합니다.</td><td>설정 화면에서 수동 실행 가능</td></tr>
+      <tr><td><b>로컬 화면 검사</b></td><td>개발 PC에 Playwright Chromium이 필요합니다.</td><td>실행 파일이 없으면 오류를 기록하고 GitHub CI 검사로 대체</td></tr>
+    </tbody></table></div>
+</section>
 """
 
 # ─────────────────────────────────────────────────────────── 설비
