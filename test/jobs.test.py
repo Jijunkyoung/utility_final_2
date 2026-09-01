@@ -26,6 +26,15 @@ class ScheduledJobsTest(unittest.TestCase):
         self.assertEqual(result["missingSchedule"], 1)
         self.assertEqual(data["notificationQueue"], [])
 
+    def test_multiple_inspections_are_queued_separately(self):
+        data = {"equipments": [{"id": "e1", "name": "보일러", "inspections": [
+                    {"id": "i1", "name": "계속사용검사", "lastDate": "2025-09-10", "cycleMonths": 12},
+                    {"id": "i2", "name": "성능검사", "lastDate": "2026-03-10", "cycleMonths": 6}
+                ]}], "consumables": [], "notificationQueue": []}
+        result = jobs.queue_due_notifications(data, "2026-08-31", 30, 30)
+        self.assertEqual(result["added"], 2)
+        self.assertEqual({x["item"] for x in data["notificationQueue"]}, {"계속사용검사", "성능검사"})
+
     def test_law_change_keeps_versions_and_requests_missing_specs(self):
         data = {"equipments": [{"id": "e1", "name": "보일러", "capacity": "1.5 t/h", "legalMgr": ""}],
                 "lawVersions": [], "lawChanges": [], "notificationQueue": []}

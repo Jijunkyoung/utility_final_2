@@ -184,13 +184,13 @@ const recheck = L.needsReview([
 ]);
 ok(/재검토/.test(recheck[0].reasons.join()), '재검토 필요 표시를 확인 필요 목록에 반영한다');
 
-/* ── ⑤ 저장 자료 v1 → v7 하위호환·공용 자료 분리 ────────────────── */
+/* ── ⑤ 저장 자료 v1 → v8 하위호환·공용 자료 분리 ────────────────── */
 
 const migrated = St.normalize({
   equipments: [{ id: 'eq1', name: '온수보일러', building: '본관' }],
   history: [], consumables: [], energy: []
 });
-eq(migrated.schemaVersion, 7, '이전 자료를 현재 스키마 버전으로 올린다');
+eq(migrated.schemaVersion, 8, '이전 자료를 현재 스키마 버전으로 올린다');
 ok(Array.isArray(migrated.manuals) && Array.isArray(migrated.lawReviews),
    '  매뉴얼·법령 검토 컬렉션을 빈 배열로 보완한다');
 ok(Array.isArray(migrated.lawDocuments) && Array.isArray(migrated.analysisResults),
@@ -203,6 +203,9 @@ eq(migrated.settings.aiMode, 'rules', '  AI를 설정하기 전에는 규칙 기
 eq(migrated.buildings[0].name, '본관', '  설비의 건물명으로 좌표 레코드를 만든다');
 ok(['x', 'y', 'w', 'h'].every(k => Number.isFinite(migrated.buildings[0][k])),
    '  조감도 좌표가 설비와 분리되어 있다');
+eq(migrated.buildings[0].points.length, 4, '  예전 사각형 좌표를 다각형 꼭짓점으로 자동 변환한다');
+const multiInspection = St.normalize({ equipments: [{ id: 'eq2', lastInspect: '2026-01-01', cycleMonths: 12, inspectCost: 1000 }] });
+eq(multiInspection.equipments[0].inspections[0].name, '정기검사', '  예전 단일 검사 값을 검사 배열로 자동 변환한다');
 eq(St.forEquipment([
   { equipmentId: 'eq1', name: 'A' }, { equipmentId: 'eq2', name: 'B' }
 ], 'eq1').map(x => x.name), ['A'], '설비 ID 기준으로 관련 데이터를 필터링한다');

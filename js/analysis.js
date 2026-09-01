@@ -109,6 +109,11 @@
     var labels = { legalMgr: '법정선임관리자', cycleMonths: '검사주기', pressure: '압력',
       capacity: '용량', hvac: '냉난방능력', spec: '기타사양' };
     var v = e && e[field];
+    if (field === 'cycleMonths' && e && Array.isArray(e.inspections) && e.inspections.length) {
+      v = e.inspections.map(function (item) {
+        return (item.name || '검사') + ' ' + (item.cycleMonths ? item.cycleMonths + '개월' : '주기 미입력');
+      }).join(' / ');
+    }
     return { label: labels[field] || field, value: text(v) };
   }
 

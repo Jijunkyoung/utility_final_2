@@ -162,7 +162,10 @@
         reasons.push('최근 검토에서 재검토 필요로 표시했습니다');
       }
 
-      if (!e.cycleMonths || Number(e.cycleMonths) <= 0) {
+      var hasInspectionCycle = Array.isArray(e.inspections) && e.inspections.some(function (item) {
+        return Number(item && item.cycleMonths) > 0;
+      });
+      if (!hasInspectionCycle && (!e.cycleMonths || Number(e.cycleMonths) <= 0)) {
         reasons.push('법정검사 주기가 입력되지 않았습니다 — 용량·종별에 따라 다르므로 확인이 필요합니다');
       }
       // 법령을 대조하려면 사양이 있어야 한다. 없으면 비교 자체가 안 된다.
