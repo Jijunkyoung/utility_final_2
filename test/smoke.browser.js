@@ -360,6 +360,8 @@ function serve(port) {
     ok(chartTitles.map(function (t) { return t.replace(/\s*\(.*/, ''); }).join('|') === '전력|수도|가스|압축공기',
        '기타 없이 네 종류 그래프만 정해진 순서로 보인다');
     ok(await page.isVisible('#drop'), '고지서를 끌어다 놓는 자리가 보인다');
+    ok(await page.isVisible('#energy-shared-path') && await page.isVisible('#energy-shared-load'),
+       '파일 선택창이 차단되면 사내 공유폴더 경로로 고지서를 불러올 수 있다');
     await page.click('#paste-toggle');
     ok(await page.isVisible('#paste') && await page.isVisible('#paste-apply'),
        '글 입력창을 열면 적용 버튼이 함께 보인다');
@@ -397,6 +399,8 @@ function serve(port) {
        '건물 ID와 좌표 구조로 배치된다');
     ok(await page.locator('#campus-image').count() === 1 && await page.locator('#building-editor tbody tr').count() === bldgs,
        '조감도 배경 이미지와 건물 다각형을 화면에서 편집할 수 있다');
+    ok(await page.isVisible('#campus-image-paste') && await page.isVisible('#campus-shared-load'),
+       '조감도는 클립보드 이미지 또는 승인된 공유폴더 경로로도 불러올 수 있다');
     ok(await page.isVisible('#building-draw-start'), '건물 추가 버튼으로 새 다각형 그리기를 시작할 수 있다');
 
     group('9-1. 이용안내 — 각 메뉴 기능을 한 화면에서 설명한다');

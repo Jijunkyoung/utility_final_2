@@ -177,6 +177,46 @@ class FacilityServerTest(unittest.TestCase):
         self.assertNotIn("/", value)
         self.assertNotIn("?", value)
 
+    def test_shared_file_read_is_limited_to_configured_root_and_allowed_types(self):
+        share = self.root / "share"
+        bills = share / "고지서"
+        bills.mkdir(parents=True)
+        bill = bills / "2026-07.pdf"
+        bill.write_bytes(b"sample-pdf")
+        server.save_config({"sharedPath": str(share)})
+        self.assertEqual(server.resolve_shared_file("고지서/2026-07.pdf"), bill.resolve())
+        outside = self.root / "outside.pdf"
+        outside.write_bytes(b"secret")
+        with self.assertRaisesRegex(ValueError, "공유폴더 밖"):
+            server.resolve_shared_file(str(outside))
+        blocked = share / "script.exe"
+        blocked.write_bytes(b"no")
+        with self.assertRaisesRegex(ValueError, "PDF"):
+            server.resolve_shared_file("script.exe")
+
+    def test_shared_file_api_returns_file_without_exposing_other_paths(self):
+        share = self.root / "share"
+        target = share / "조감도" / "campus.jpg"
+        target.parent.mkdir(parents=True)
+        target.write_bytes(b"jpeg-sample")
+        server.save_config({"sharedPath": str(share)})
+        httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
+        thread = threading.Thread(target=httpd.serve_forever, daemon=True); thread.start()
+        base = f"http://127.0.0.1:{httpd.server_address[1]}"
+        try:
+            req = Request(base + "/api/files/read", data=json.dumps({"path": "조감도/campus.jpg"}).encode(),
+                          method="POST", headers={"Content-Type": "application/json"})
+            with urlopen(req, timeout=2) as response:
+                self.assertEqual(response.read(), b"jpeg-sample")
+                self.assertEqual(response.headers["X-Facility-Filename"], "campus.jpg")
+            denied = Request(base + "/api/files/read", data=json.dumps({"path": str(self.root / "outside.pdf")}).encode(),
+                             method="POST", headers={"Content-Type": "application/json"})
+            with self.assertRaises(HTTPError) as error:
+                urlopen(denied, timeout=2)
+            self.assertEqual(error.exception.code, 400)
+        finally:
+            httpd.shutdown(); httpd.server_close(); thread.join(timeout=2)
+
     def test_smtp_send_uses_server_side_settings(self):
         config = {**server.DEFAULTS, "smtpHost": "smtp.company.local", "smtpPort": 587,
                   "smtpFrom": "facility@company.com", "smtpStartTls": True}

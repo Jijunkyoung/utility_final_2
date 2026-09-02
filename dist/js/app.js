@@ -1831,6 +1831,20 @@
     });
     drop.addEventListener('drop', function (e) { readFiles(e.dataTransfer.files); });
     input.addEventListener('change', function () { readFiles(input.files); input.value = ''; });
+    $('#energy-shared-load').addEventListener('click', function () {
+      var path = $('#energy-shared-path').value.trim();
+      if (!path) { statusLine('#energy-shared-status', false, '공유폴더 내 파일 경로를 입력하세요.'); return; }
+      this.disabled = true;
+      statusLine('#energy-shared-status', true, '사내 공유폴더에서 고지서를 읽고 있습니다…');
+      var button = this;
+      I.readSharedFile(db.settings, path).then(function (result) {
+        if (!result.ok || !result.file) {
+          statusLine('#energy-shared-status', false, result.error || '고지서를 읽지 못했습니다.'); return;
+        }
+        readFiles([result.file]);
+        statusLine('#energy-shared-status', true, result.file.name + ' 파일을 가져왔습니다.');
+      }).finally(function () { button.disabled = false; });
+    });
 
     $('#paste-toggle').addEventListener('click', function () {
       var panel = $('#paste-panel');
@@ -2048,26 +2062,86 @@
 
   /* ═══════════════════════════════════════════════════ 조감도 */
 
+  function applyCampusImage(file, source) {
+    if (!file) return;
+    if (!/^image\/(png|jpeg|webp)$/i.test(file.type || '') && !/\.(png|jpe?g|webp)$/i.test(file.name || '')) {
+      statusLine('#campus-image-status', false, 'PNG·JPG·WebP 이미지만 사용할 수 있습니다.'); return;
+    }
+    if (file.size > 12 * 1024 * 1024) {
+      statusLine('#campus-image-status', false, '이미지는 12MB 이하로 선택하세요.'); return;
+    }
+    statusLine('#campus-image-status', true, (source || '이미지') + '를 처리하고 있습니다…');
+    var reader = new FileReader();
+    reader.onerror = function () { statusLine('#campus-image-status', false, '이미지 파일을 읽지 못했습니다.'); };
+    reader.onload = function () {
+      var img = new Image();
+      img.onerror = function () { statusLine('#campus-image-status', false, '이미지 형식을 확인하세요.'); };
+      img.onload = function () {
+        var scale = Math.min(1, 1600 / img.width), canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * scale); canvas.height = Math.round(img.height * scale);
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        db.settings.mapImageData = canvas.toDataURL('image/jpeg', 0.82);
+        if (cacheDb()) {
+          renderCampus();
+          statusLine('#campus-image-status', true, (source || file.name || '조감도 이미지') + '를 적용했습니다.');
+        }
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function imageFromClipboardEvent(event) {
+    var items = Array.prototype.slice.call(event.clipboardData && event.clipboardData.items || []);
+    var item = items.find(function (x) { return /^image\//.test(x.type || ''); });
+    if (!item) return false;
+    var blob = item.getAsFile();
+    if (!blob) return false;
+    event.preventDefault();
+    applyCampusImage(new File([blob], 'clipboard-image.' + (blob.type === 'image/png' ? 'png' : 'jpg'), { type: blob.type }), '클립보드 이미지');
+    return true;
+  }
+
   function initMap() {
     $('#campus-image').addEventListener('change', function () {
       var file = this.files && this.files[0]; if (!file) return;
-      if (file.size > 12 * 1024 * 1024) { alert('이미지는 12MB 이하로 선택하세요.'); return; }
-      var reader = new FileReader();
-      reader.onload = function () {
-        var img = new Image();
-        img.onload = function () {
-          var scale = Math.min(1, 1600 / img.width), canvas = document.createElement('canvas');
-          canvas.width = Math.round(img.width * scale); canvas.height = Math.round(img.height * scale);
-          canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-          db.settings.mapImageData = canvas.toDataURL('image/jpeg', 0.82);
-          cacheDb(); renderCampus();
-        };
-        img.src = reader.result;
-      };
-      reader.readAsDataURL(file); this.value = '';
+      applyCampusImage(file, file.name); this.value = '';
+    });
+    document.addEventListener('paste', imageFromClipboardEvent);
+    $('#campus-image-paste').addEventListener('click', function () {
+      if (!navigator.clipboard || !navigator.clipboard.read) {
+        statusLine('#campus-image-status', false, '클립보드 읽기가 차단되었습니다. 화면에서 Ctrl+V를 사용하거나 공유폴더 경로를 이용하세요.'); return;
+      }
+      navigator.clipboard.read().then(function (items) {
+        var work = [];
+        items.forEach(function (item) {
+          item.types.filter(function (type) { return /^image\//.test(type); }).forEach(function (type) {
+            work.push(item.getType(type).then(function (blob) {
+              applyCampusImage(new File([blob], 'clipboard-image.' + (type === 'image/png' ? 'png' : 'jpg'), { type: type }), '클립보드 이미지');
+            }));
+          });
+        });
+        if (!work.length) throw new Error('클립보드에 이미지가 없습니다.');
+        return Promise.all(work);
+      }).catch(function (error) {
+        statusLine('#campus-image-status', false, (error && error.message) || '클립보드 이미지를 읽지 못했습니다.');
+      });
+    });
+    $('#campus-shared-load').addEventListener('click', function () {
+      var path = $('#campus-shared-path').value.trim();
+      if (!path) { statusLine('#campus-image-status', false, '공유폴더 내 이미지 경로를 입력하세요.'); return; }
+      this.disabled = true; var button = this;
+      statusLine('#campus-image-status', true, '사내 공유폴더에서 조감도를 읽고 있습니다…');
+      I.readSharedFile(db.settings, path).then(function (result) {
+        if (!result.ok || !result.file) {
+          statusLine('#campus-image-status', false, result.error || '조감도를 읽지 못했습니다.'); return;
+        }
+        applyCampusImage(result.file, result.file.name);
+      }).finally(function () { button.disabled = false; });
     });
     $('#campus-image-clear').addEventListener('click', function () {
       db.settings.mapImageData = ''; cacheDb(); renderCampus();
+      statusLine('#campus-image-status', true, '배경 이미지를 제거했습니다.');
     });
     $('#building-draw-start').addEventListener('click', function () { startBuildingDrawing(null); });
     $('#building-draw-undo').addEventListener('click', function () {

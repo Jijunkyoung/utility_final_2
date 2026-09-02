@@ -19,7 +19,7 @@ from email.message import EmailMessage
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError, URLError
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
@@ -101,6 +101,32 @@ def safe_segment(value: str, fallback: str = "file") -> str:
     value = re.sub(r"[\\/:*?\"<>|\x00-\x1f]", "_", str(value or "").strip())
     value = value.replace("..", "_").strip(" .")
     return (value or fallback)[:160]
+
+
+ALLOWED_SHARED_FILE_SUFFIXES = {".pdf", ".csv", ".xls", ".xlsx", ".png", ".jpg", ".jpeg", ".webp"}
+
+
+def resolve_shared_file(value: str, config: dict | None = None) -> Path:
+    """설정된 공유폴더 안의 승인 형식만 읽는다. 임의의 PC 파일은 노출하지 않는다."""
+    raw = str(value or "").strip()
+    if not raw:
+        raise ValueError("공유폴더 내 파일 경로를 입력하세요.")
+    root = shared_root(config).resolve()
+    candidate = Path(raw)
+    if not candidate.is_absolute():
+        candidate = root / candidate
+    target = candidate.resolve()
+    try:
+        target.relative_to(root)
+    except ValueError as exc:
+        raise ValueError("설정된 공유폴더 밖의 파일은 읽을 수 없습니다.") from exc
+    if target.suffix.lower() not in ALLOWED_SHARED_FILE_SUFFIXES:
+        raise ValueError("PDF·CSV·Excel·PNG·JPG·WebP 파일만 읽을 수 있습니다.")
+    if not target.is_file():
+        raise ValueError("공유폴더에서 파일을 찾지 못했습니다.")
+    if target.stat().st_size > 60 * 1024 * 1024:
+        raise ValueError("파일이 허용 크기 60MB를 넘었습니다.")
+    return target
 
 
 def database(config: dict | None = None) -> sqlite3.Connection:
@@ -560,6 +586,7 @@ class Handler(BaseHTTPRequestHandler):
         if origin and self.origin_allowed():
             self.send_header("Access-Control-Allow-Origin", origin)
             self.send_header("Vary", "Origin")
+            self.send_header("Access-Control-Expose-Headers", "X-Facility-Filename")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Cache-Control", "no-store")
@@ -739,6 +766,17 @@ class Handler(BaseHTTPRequestHandler):
                     conn.execute("INSERT INTO files(equipment_id,category,filename,path,content_type,size,created_at) VALUES(?,?,?,?,?,?,?)",
                                  (equipment, category, filename, str(target), self.headers.get("Content-Type"), len(data), now()))
                 self.send_json(200, {"ok": True, "path": str(target), "size": len(data)})
+                return
+            if parsed.path == "/api/files/read":
+                if not self.role_guard("editor"): return
+                target = resolve_shared_file(self.read_json().get("path"))
+                data = target.read_bytes()
+                mime = mimetypes.guess_type(str(target))[0] or "application/octet-stream"
+                self.send_response(200)
+                self.send_header("Content-Type", mime)
+                self.send_header("Content-Length", str(len(data)))
+                self.send_header("X-Facility-Filename", quote(target.name))
+                self.end_headers(); self.wfile.write(data)
                 return
             if parsed.path == "/api/laws":
                 if not self.role_guard("editor"): return
