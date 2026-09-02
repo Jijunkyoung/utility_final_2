@@ -59,13 +59,23 @@
   <div class="btnrow">
     <label class="btn file-button" for="campus-image">조감도 이미지 선택</label>
     <input id="campus-image" type="file" accept="image/png,image/jpeg,image/webp">
+    <button class="btn" id="campus-image-paste" type="button">클립보드 이미지 붙여넣기</button>
     <button class="btn" id="campus-image-clear" type="button">배경 이미지 제거</button>
     <button class="btn primary" id="building-draw-start" type="button">+ 건물 추가</button>
     <button class="btn" id="building-draw-undo" type="button" hidden>마지막 점 취소</button>
     <button class="btn" id="building-draw-finish" type="button" hidden>다각형 완성</button>
     <button class="btn" id="building-draw-cancel" type="button" hidden>그리기 취소</button>
   </div>
-  <p class="sub">건물 추가를 누른 뒤 조감도 위에서 건물 외곽점을 3개 이상 순서대로 찍고 다각형 완성을 누르세요. 배경 이미지는 이 PC에만, 다각형 좌표는 공용 데이터로 저장됩니다.</p>
+  <div class="security-import-panel compact">
+    <div><b>사내 공유폴더에서 조감도 불러오기</b><p class="sub">사내 보조 서버 설정 경로 안의 PNG·JPG·WebP 파일만 읽습니다.</p></div>
+    <div class="path-import-row">
+      <label for="campus-shared-path">공유폴더 내 경로</label>
+      <input id="campus-shared-path" placeholder="조감도\울산캠퍼스.jpg">
+      <button class="btn" id="campus-shared-load" type="button">경로에서 불러오기</button>
+    </div>
+    <div id="campus-image-status" aria-live="polite"></div>
+  </div>
+  <p class="sub">건물 추가를 누른 뒤 조감도 위에서 건물 외곽점을 3개 이상 순서대로 찍고 다각형 완성을 누르세요. 클립보드 붙여넣기는 화면을 캡처한 뒤 버튼을 누르거나 이 화면에서 Ctrl+V를 사용합니다.</p>
   <div id="building-draw-status" aria-live="polite"></div>
   <div id="campus"></div>
 </div>

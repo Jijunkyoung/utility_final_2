@@ -55,6 +55,26 @@
       return request(settings, '/api/files' + q, { method: 'POST', headers: authHeaders(settings, { 'Content-Type': file.type || 'application/octet-stream' }), body: buf });
     });
   }
+  function readSharedFile(settings, path) {
+    var url = base(settings);
+    if ((!url && !sameOriginServer()) || !root.fetch) {
+      return Promise.resolve({ ok: false, offline: true, error: '사내 보조 서버가 연결되지 않았습니다.' });
+    }
+    return root.fetch((url || '') + '/api/files/read', {
+      method: 'POST', headers: jsonHeaders(settings), body: JSON.stringify({ path: path })
+    }).then(function (res) {
+      if (!res.ok) return res.text().then(function (body) {
+        var data; try { data = JSON.parse(body); } catch (e) { data = {}; }
+        return { ok: false, status: res.status, error: data.error || body || '파일을 읽지 못했습니다.' };
+      });
+      return res.arrayBuffer().then(function (buf) {
+        var encoded = res.headers.get('X-Facility-Filename') || 'shared-file';
+        var name; try { name = decodeURIComponent(encoded); } catch (e) { name = encoded; }
+        var type = res.headers.get('Content-Type') || 'application/octet-stream';
+        return { ok: true, file: new File([buf], name, { type: type }), size: buf.byteLength };
+      });
+    }).catch(function (e) { return { ok: false, offline: true, error: e && e.message || String(e) }; });
+  }
   function analyze(settings, kind, equipment, documentText) {
     return request(settings, '/api/analyze', { method: 'POST', headers: jsonHeaders(settings), body: JSON.stringify({
       kind: kind, equipment: equipment, text: documentText, mode: settings.aiMode,
@@ -118,7 +138,7 @@
   }
 
   return { health: health, saveSettings: saveSettings, testStorage: testStorage,
-    upload: upload, analyze: analyze, saveLaw: saveLaw, importLaw: importLaw, queryLaw: queryLaw, askLaw: askLaw, saveAnalysis: saveAnalysis,
+    upload: upload, readSharedFile: readSharedFile, analyze: analyze, saveLaw: saveLaw, importLaw: importLaw, queryLaw: queryLaw, askLaw: askLaw, saveAnalysis: saveAnalysis,
     loadState: loadState, saveState: saveState, audit: audit, backup: backup, backups: backups,
     restore: restore, jobs: jobs, runJobs: runJobs, ocr: ocr,
     sendNotification: sendNotification, sameOriginServer: sameOriginServer };

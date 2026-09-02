@@ -200,8 +200,8 @@ PAGES["guide.html"] = """
   <article class="guide-card"><h3>알림</h3><p>검사와 소모품 교체 예정일을 계산하고 담당자별 안내 문안을 만듭니다.</p><ul><li>D-day·기한 초과 확인</li><li>승인 대기함 등록 후 메일 발송 또는 복사</li></ul><a class="btn small-btn" href="alerts.html">알림 열기</a></article>
   <article class="guide-card"><h3>이력</h3><p>법정검사·소모품 교체·고장 AS 완료일과 실제 비용을 기록합니다.</p><ul><li>완료한 검사 항목을 직접 선택</li><li>최근 완료일·다음 예정일·실제 단가 자동 갱신</li></ul><a class="btn small-btn" href="history.html">이력 열기</a></article>
   <article class="guide-card"><h3>비용</h3><p>등록된 검사·교체주기와 단가를 바탕으로 차년도 예상 비용을 계산합니다.</p><ul><li>검사·소모품 구분 합계</li><li>물가상승률·예비비 반영</li><li>예산 자료 엑셀 내보내기</li></ul><a class="btn small-btn" href="cost.html">비용 열기</a></article>
-  <article class="guide-card"><h3>에너지</h3><p>전기·수도·가스·압축공기 사용량을 월별로 정리합니다.</p><ul><li>PDF·엑셀·붙여넣기 자료 읽기</li><li>에너지원별 그래프 4개 표시</li><li>정리 결과 엑셀 내보내기</li></ul><a class="btn small-btn" href="energy.html">에너지 열기</a></article>
-  <article class="guide-card"><h3>조감도</h3><p>조감도 위에 건물 외곽을 다각형으로 그리고 건물별 설비를 조회합니다.</p><ul><li>배경 이미지 선택</li><li>건물 추가·다시 그리기·이름 변경</li><li>건물 선택 후 설치 설비 확인</li></ul><a class="btn small-btn" href="map.html">조감도 열기</a></article>
+  <article class="guide-card"><h3>에너지</h3><p>전기·수도·가스·압축공기 사용량을 월별로 정리합니다.</p><ul><li>PDF·엑셀·붙여넣기 자료 읽기</li><li>보안 차단 시 승인된 공유폴더 경로로 불러오기</li><li>에너지원별 그래프 4개와 엑셀 내보내기</li></ul><a class="btn small-btn" href="energy.html">에너지 열기</a></article>
+  <article class="guide-card"><h3>조감도</h3><p>조감도 위에 건물 외곽을 다각형으로 그리고 건물별 설비를 조회합니다.</p><ul><li>이미지 선택·클립보드 붙여넣기·공유폴더 경로 불러오기</li><li>건물 추가·다시 그리기·이름 변경</li><li>건물 선택 후 설치 설비 확인</li></ul><a class="btn small-btn" href="map.html">조감도 열기</a></article>
   <article class="guide-card"><h3>설정</h3><p>사내 저장소, 자동 점검과 승인된 AI·OCR·법령 API 연결을 관리합니다.</p><ul><li>공유폴더·공용 DB·백업 복원</li><li>로컬 AI 또는 외부 API 설정</li><li>자동 점검 실행 내역 확인</li></ul><a class="btn small-btn" href="settings.html">설정 열기</a></article>
   <article class="guide-card guide-warning"><h3>확인 원칙</h3><p>자동 분석은 담당자의 검토를 돕는 기능이며 법적 적합 여부를 확정하지 않습니다.</p><ul><li>검사주기는 설비 사양과 최신 법령 원문으로 최종 확인</li><li>외부 전송 전 사내 보안정책과 승인 여부 확인</li><li>메일은 승인 대기함에서 수신자와 내용을 확인한 뒤 발송</li></ul></article>
 </div>
@@ -213,7 +213,7 @@ PAGES["guide.html"] = """
     <thead><tr><th>항목</th><th>필요한 조치</th><th>현재 처리</th></tr></thead><tbody>
       <tr><td><b>실제 메일 발송</b></td><td>사내 SMTP 주소·계정과 발송 권한을 설정합니다.</td><td>승인 대기함과 수동 복사 기능 사용 가능</td></tr>
       <tr><td><b>OCR·법령·외부 AI</b></td><td>회사 보안 승인 후 API 주소와 인증정보를 서버에만 설정합니다.</td><td>미설정 또는 오류 항목만 건너뛰고 기록</td></tr>
-      <tr><td><b>공유폴더 저장</b></td><td>운영 PC에서 실제 공유폴더 경로와 읽기·쓰기 권한을 확인합니다.</td><td>연결 전 자료는 브라우저에 임시 저장</td></tr>
+      <tr><td><b>공유폴더 저장·읽기</b></td><td>운영 PC에서 실제 공유폴더 경로와 읽기·쓰기 권한을 확인합니다.</td><td>승인된 폴더 안의 고지서·조감도는 경로로 불러오기 가능</td></tr>
       <tr><td><b>현장 자료</b></td><td>실제 설비·담당자·매뉴얼·검사·고지서와 캠퍼스 조감도 이미지를 등록합니다.</td><td>샘플 자료 또는 빈 대장으로 기능 확인 가능</td></tr>
       <tr><td><b>자동 점검 실행</b></td><td>Windows 작업 스케줄러에 <code>server/run_jobs.bat</code>를 매일 실행하도록 등록합니다.</td><td>설정 화면에서 수동 실행 가능</td></tr>
       <tr><td><b>로컬 화면 검사</b></td><td>개발 PC에 Playwright Chromium이 필요합니다.</td><td>실행 파일이 없으면 오류를 기록하고 GitHub CI 검사로 대체</td></tr>
@@ -532,6 +532,15 @@ PAGES["energy.html"] = """
     <button class="btn" id="energy-xlsx" disabled>엑셀로 내보내기</button>
     <button class="btn" id="energy-clear">비우기</button>
   </div>
+  <div class="security-import-panel">
+    <div><b>파일 선택창이 바로 닫히나요?</b><p class="sub">사내 보조 서버가 연결된 경우, 설정된 공유폴더 안의 고지서를 경로로 읽을 수 있습니다.</p></div>
+    <div class="path-import-row">
+      <label for="energy-shared-path">공유폴더 내 경로</label>
+      <input id="energy-shared-path" placeholder="고지서\\2026-07-전력.pdf">
+      <button class="btn" id="energy-shared-load" type="button">경로에서 불러오기</button>
+    </div>
+    <div id="energy-shared-status" aria-live="polite"></div>
+  </div>
   <div id="paste-panel" class="paste-panel" hidden>
     <label for="paste"><b>고지서 내용을 붙여넣으세요</b></label>
     <p class="sub">연월·종류·사용량이 포함된 글을 넣은 뒤 적용 버튼을 누릅니다.</p>
@@ -560,13 +569,23 @@ PAGES["map.html"] = """
   <div class="btnrow">
     <label class="btn file-button" for="campus-image">조감도 이미지 선택</label>
     <input id="campus-image" type="file" accept="image/png,image/jpeg,image/webp">
+    <button class="btn" id="campus-image-paste" type="button">클립보드 이미지 붙여넣기</button>
     <button class="btn" id="campus-image-clear" type="button">배경 이미지 제거</button>
     <button class="btn primary" id="building-draw-start" type="button">+ 건물 추가</button>
     <button class="btn" id="building-draw-undo" type="button" hidden>마지막 점 취소</button>
     <button class="btn" id="building-draw-finish" type="button" hidden>다각형 완성</button>
     <button class="btn" id="building-draw-cancel" type="button" hidden>그리기 취소</button>
   </div>
-  <p class="sub">건물 추가를 누른 뒤 조감도 위에서 건물 외곽점을 3개 이상 순서대로 찍고 다각형 완성을 누르세요. 배경 이미지는 이 PC에만, 다각형 좌표는 공용 데이터로 저장됩니다.</p>
+  <div class="security-import-panel compact">
+    <div><b>사내 공유폴더에서 조감도 불러오기</b><p class="sub">사내 보조 서버 설정 경로 안의 PNG·JPG·WebP 파일만 읽습니다.</p></div>
+    <div class="path-import-row">
+      <label for="campus-shared-path">공유폴더 내 경로</label>
+      <input id="campus-shared-path" placeholder="조감도\\울산캠퍼스.jpg">
+      <button class="btn" id="campus-shared-load" type="button">경로에서 불러오기</button>
+    </div>
+    <div id="campus-image-status" aria-live="polite"></div>
+  </div>
+  <p class="sub">건물 추가를 누른 뒤 조감도 위에서 건물 외곽점을 3개 이상 순서대로 찍고 다각형 완성을 누르세요. 클립보드 붙여넣기는 화면을 캡처한 뒤 버튼을 누르거나 이 화면에서 Ctrl+V를 사용합니다.</p>
   <div id="building-draw-status" aria-live="polite"></div>
   <div id="campus"></div>
 </div>

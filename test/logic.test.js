@@ -288,6 +288,8 @@ ok(typeof I.health === 'function' && typeof I.analyze === 'function'
    '사내 서버의 공용 DB·백업·공유폴더·AI 연결 함수를 제공한다');
 ok(typeof I.queryLaw === 'function' && typeof I.askLaw === 'function',
    '법령 최신본 조회와 근거 기반 질의 함수를 제공한다');
+ok(typeof I.readSharedFile === 'function',
+   '파일 선택창이 차단된 환경에서 사내 공유폴더 파일을 읽는 함수를 제공한다');
 let questionLaws = L.questionCandidates('우리 회사 전기용량은 22900 kW인데 안전관리자 선임기준은?');
 ok(questionLaws.some(x => x.law === '전기안전관리법'),
    '전기용량·안전관리자 질문에서 전기안전관리법을 우선 후보로 찾는다');

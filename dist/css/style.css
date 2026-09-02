@@ -78,6 +78,8 @@ input[type=file]{display:none;}
 .paste-actions{display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:10px;}
 .paste-actions .sub{margin:0;}
 @media (max-width:640px){.paste-actions{align-items:stretch; flex-direction:column;}.paste-actions .btn{width:100%;}}
+.security-import-panel{display:grid;gap:10px;margin-top:14px;padding:15px;border:1px solid #c9d5df;border-radius:10px;background:#f8fafc;}
+.security-import-panel.compact{margin-bottom:12px}.security-import-panel p{margin:2px 0 0}.path-import-row{display:grid;grid-template-columns:auto minmax(220px,1fr) auto;gap:9px;align-items:center}.path-import-row label{font-size:13px;font-weight:700;color:var(--sub)}.path-import-row input{min-height:42px;padding:0 11px;border:1px solid #b8c5d1;border-radius:8px;background:#fff;color:var(--ink);font:inherit}.path-import-row input:focus{outline:2px solid var(--accent);outline-offset:-1px}@media(max-width:720px){.path-import-row{grid-template-columns:1fr}.path-import-row .btn{width:100%}}
 
 .note{border-left:4px solid var(--accent); background:#eef6fa; color:#0b3a4f;
   padding:13px 15px; border-radius:8px; font-size:14px; margin:14px 0;}
