@@ -9,7 +9,12 @@
   function sameOriginServer() {
     return !!(root.document && root.document.querySelector('meta[name="facility-server"][content="same-origin"]'));
   }
-  function base(settings) { return String(settings && settings.serverUrl || '').trim().replace(/\/$/, ''); }
+  function base(settings) {
+    /* 사내 서버가 화면까지 제공하면 항상 같은 출처를 쓴다. 예전에 저장한 외부 주소 때문에
+       다시 외부망으로 나가거나 HTTPS→HTTP 혼합 콘텐츠가 되는 것을 막는다. */
+    if (sameOriginServer()) return '';
+    return String(settings && settings.serverUrl || '').trim().replace(/\/$/, '');
+  }
   function authHeaders(settings, source) {
     var out = Object.assign({}, source || {}), token = String(settings && settings.serverToken || '').trim();
     if (token) out.Authorization = 'Bearer ' + token;
@@ -20,6 +25,10 @@
   function request(settings, path, options, timeoutMs) {
     var url = base(settings);
     if ((!url && !sameOriginServer()) || !root.fetch) return Promise.resolve({ ok: false, offline: true, error: '사내 서버 주소가 없습니다.' });
+    if (root.location && root.location.protocol === 'https:' && /^http:\/\//i.test(url)) {
+      return Promise.resolve({ ok: false, offline: true,
+        error: 'HTTPS 외부 화면에서는 HTTP 사내 서버 연결이 차단됩니다. http://서버PC-IP:8765에서 대시보드를 직접 여세요.' });
+    }
     var controller = root.AbortController ? new root.AbortController() : null;
     var timer = controller ? setTimeout(function () { controller.abort(); }, timeoutMs || 5000) : null;
     var opts = options || {};

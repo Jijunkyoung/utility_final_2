@@ -374,6 +374,9 @@ function serve(port) {
 
     group('8-1. 설정 — 공유폴더·공용 DB와 두 가지 AI 연결을 고른다');
     await go('settings.html');
+    ok(await page.isVisible('#intranet-state')
+       && (await page.textContent('.intranet-card')).indexOf('start_server_lan.bat') >= 0,
+       '외부 사이트 차단 환경을 위한 사내망 접속 순서와 실행 파일을 안내한다');
     ok(await page.isVisible('#storage-settings [name="sharedPath"]')
        && await page.isVisible('#storage-test'), '공유폴더 경로와 읽기·쓰기 시험 버튼이 있다');
     ok(await page.isVisible('#storage-settings [name="serverToken"]')

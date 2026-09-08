@@ -32,6 +32,19 @@ class FacilityServerTest(unittest.TestCase):
         self.assertEqual(data["sharedPath"], str(share))
         self.assertEqual(server.DEFAULTS["apiToken"], "")
 
+    def test_lan_requires_real_32_character_token(self):
+        self.assertIn("32자", server.lan_token_error({"apiToken": "short"}))
+        self.assertIn("예제", server.lan_token_error({"apiToken": "회사에서 정한 충분히 긴 임의 문자열입니다1234567890"}))
+        self.assertEqual(server.lan_token_error({"apiToken": "3N9vQ7mZ2xK8pL5sR4tW6yB1dF0hJcUa"}), "")
+
+    def test_intranet_readiness_returns_only_private_access_urls(self):
+        token = "3N9vQ7mZ2xK8pL5sR4tW6yB1dF0hJcUa"
+        with mock.patch.object(server, "intranet_ipv4_addresses", return_value=["10.20.30.40"]):
+            result = server.intranet_readiness({"apiToken": token, "sharedPath": "share"}, 8765)
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["urls"], ["http://10.20.30.40:8765"])
+        self.assertEqual(result["errors"], [])
+
     def test_law_question_prompt_requires_evidence_and_missing_information(self):
         value = server.prompt("law_question", {"question": "전기 안전관리자 선임기준?"}, "전기안전관리법 원문")
         self.assertIn('"laws"', value)
@@ -124,7 +137,9 @@ class FacilityServerTest(unittest.TestCase):
 
             good = Request(base + "/api/health", headers={"Authorization": "Bearer test-token"})
             with urlopen(good, timeout=2) as response:
-                self.assertTrue(json.load(response)["ok"])
+                health = json.load(response)
+                self.assertTrue(health["ok"])
+                self.assertEqual(health["network"]["scope"], "this-device")
 
             bad_origin = Request(base + "/api/health", headers={
                 "Authorization": "Bearer test-token", "Origin": "https://unapproved.example",
