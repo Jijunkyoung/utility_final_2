@@ -2347,6 +2347,11 @@
     setFormValues($('#job-settings'), db.settings);
     setFormValues($('#ocr-settings'), db.settings);
 
+    var directIntranet = I.sameOriginServer();
+    $('#intranet-state').innerHTML = directIntranet
+      ? '<div class="status-line good">현재 사내 서버에서 직접 열었습니다: <b>' + esc(location.origin) + '</b></div>'
+      : '<div class="status-line bad">현재 화면은 외부/정적 배포본입니다. 회사에서는 사내 서버 실행 후 <b>http://서버PC-IP:8765</b>로 다시 접속하세요.</div>';
+
     $('#storage-save').addEventListener('click', function () {
       Object.assign(db.settings, settingsFromForms()); cacheDb();
       I.saveSettings(db.settings, '').then(function (r) {
@@ -2360,6 +2365,7 @@
       I.health(db.settings).then(function (r) {
         statusLine('#storage-status', r.ok, r.ok ? '사내 서버 연결에 성공했습니다. 현재 권한: '
           + ({ admin: '관리자', editor: '편집자', viewer: '읽기 전용' }[r.role] || r.role || '확인 불가')
+          + (r.network && r.network.scope === 'intranet' ? ' · 사내망 공개 모드' : ' · 이 PC 전용 모드')
           : '연결하지 못했습니다: ' + r.error);
       });
     });

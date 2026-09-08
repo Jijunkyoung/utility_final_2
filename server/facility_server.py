@@ -6,14 +6,19 @@
 """
 from __future__ import annotations
 
+import ipaddress
 import json
 import mimetypes
 import os
 import re
+import socket
 import smtplib
 import ssl
 import sqlite3
+import sys
 import tempfile
+import threading
+import webbrowser
 from datetime import datetime, timezone
 from email.message import EmailMessage
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -62,6 +67,9 @@ SHARED_KEYS = (
     "managers", "notificationQueue",
 )
 
+MIN_LAN_TOKEN_LENGTH = 32
+LAN_TOKEN_PLACEHOLDERS = ("충분히 긴", "임의 문자열", "회사에서 정한", "change-me", "example-token")
+
 
 def now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -75,6 +83,59 @@ def load_config() -> dict:
         except (OSError, ValueError):
             pass
     return data
+
+
+def lan_token_error(config: dict | None = None) -> str:
+    """LAN 공개 전에 예제값이 아닌 충분한 길이의 관리자 토큰인지 확인한다."""
+    token = str((config or load_config()).get("apiToken") or "").strip()
+    lowered = token.lower()
+    if len(token) < MIN_LAN_TOKEN_LENGTH:
+        return f"apiToken을 {MIN_LAN_TOKEN_LENGTH}자 이상으로 설정하세요."
+    if any(marker.lower() in lowered for marker in LAN_TOKEN_PLACEHOLDERS):
+        return "config.example.json의 예제 apiToken을 실제 임의 문자열로 바꾸세요."
+    return ""
+
+
+def intranet_ipv4_addresses() -> list[str]:
+    """서버 PC가 다른 사내 PC에 안내할 수 있는 사설 IPv4 주소만 반환한다."""
+    found: set[str] = set()
+    try:
+        infos = socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET)
+    except OSError:
+        infos = []
+    for info in infos:
+        value = info[4][0]
+        try:
+            address = ipaddress.ip_address(value)
+        except ValueError:
+            continue
+        if address.version == 4 and address.is_private and not address.is_loopback and not address.is_link_local:
+            found.add(value)
+    return sorted(found, key=lambda value: tuple(int(part) for part in value.split(".")))
+
+
+def intranet_readiness(config: dict | None = None, port: int = 8765) -> dict:
+    cfg = config or load_config()
+    errors: list[str] = []
+    warnings: list[str] = []
+    if not 1024 <= port <= 65535:
+        errors.append("포트는 1024~65535 범위로 지정하세요.")
+    token_error = lan_token_error(cfg)
+    if token_error:
+        errors.append(token_error)
+    if not str(cfg.get("sharedPath") or "").strip():
+        warnings.append("공유폴더 경로가 비어 있어 서버 PC의 server/data 폴더를 사용합니다.")
+    addresses = intranet_ipv4_addresses()
+    if not addresses:
+        warnings.append("사설 IPv4 주소를 자동 확인하지 못했습니다. 회사 IT 담당자에게 서버 PC 주소를 확인하세요.")
+    return {
+        "ok": not errors,
+        "errors": errors,
+        "warnings": warnings,
+        "addresses": addresses,
+        "urls": [f"http://{address}:{port}" for address in addresses],
+        "port": port,
+    }
 
 
 def save_config(data: dict) -> None:
@@ -650,9 +711,13 @@ class Handler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/health":
             cfg = load_config()
+            bound_host, bound_port = self.server.server_address[:2]
+            lan_mode = bound_host not in ("127.0.0.1", "localhost", "::1")
             self.send_json(200, {"ok": True, "service": "Facility AI 사내 서버",
                                  "sharedPath": str(shared_root(cfg)), "mailConfigured": mail_configured(cfg),
-                                 "role": self.request_role(), "time": now()})
+                                 "role": self.request_role(), "time": now(),
+                                 "network": {"scope": "intranet" if lan_mode else "this-device",
+                                             "port": bound_port, "sameOrigin": True}})
             return
         if parsed.path == "/api/settings":
             full = load_config(); cfg = dict(full)
@@ -840,14 +905,39 @@ class Handler(BaseHTTPRequestHandler):
 def main():
     # 기본은 이 PC에서만 접속한다. 여러 PC 공개는 IT 승인 후 start_server_lan.bat로 연다.
     host = os.environ.get("FACILITY_AI_HOST", "127.0.0.1")
-    port = int(os.environ.get("FACILITY_AI_PORT", "8765"))
-    if host not in ("127.0.0.1", "localhost", "::1") and not str(load_config().get("apiToken") or "").strip():
-        raise SystemExit("LAN 공개를 중단했습니다: config.local.json에 충분히 긴 apiToken을 먼저 설정하세요.")
+    try:
+        port = int(os.environ.get("FACILITY_AI_PORT", "8765"))
+    except ValueError as exc:
+        raise SystemExit("FACILITY_AI_PORT는 숫자로 입력하세요.") from exc
+    lan_mode = host not in ("127.0.0.1", "localhost", "::1")
+    readiness = intranet_readiness(load_config(), port)
+    if "--check-lan" in sys.argv:
+        print("Facility AI 사내망 실행 사전 점검")
+        for item in readiness["errors"]:
+            print("[중단] " + item)
+        for item in readiness["warnings"]:
+            print("[확인] " + item)
+        for url in readiness["urls"]:
+            print("[접속 주소] " + url)
+        print("[서버 PC 확인 주소] http://127.0.0.1:%d" % port)
+        raise SystemExit(0 if readiness["ok"] else 1)
+    if not 1024 <= port <= 65535:
+        raise SystemExit("서버 실행을 중단했습니다: 포트는 1024~65535 범위로 지정하세요.")
+    if lan_mode and lan_token_error(load_config()):
+        raise SystemExit("LAN 공개를 중단했습니다: " + lan_token_error(load_config()))
     database().close()
+    httpd = ThreadingHTTPServer((host, port), Handler)
     print(f"Facility AI 사내 서버: http://{host}:{port}")
+    if lan_mode:
+        print("서버 PC 확인 주소: http://127.0.0.1:%d" % port)
+        for address in intranet_ipv4_addresses():
+            print("사내 PC 접속 주소: http://%s:%d" % (address, port))
+        print("회사 IT가 승인한 사내망 범위에서만 TCP %d을 허용하세요." % port)
     print("화면과 API를 같은 주소에서 제공합니다.")
     print(f"설정 파일: {CONFIG_PATH}")
-    ThreadingHTTPServer((host, port), Handler).serve_forever()
+    if os.environ.get("FACILITY_AI_OPEN_BROWSER") == "1":
+        threading.Timer(0.7, lambda: webbrowser.open("http://127.0.0.1:%d" % port)).start()
+    httpd.serve_forever()
 
 
 if __name__ == "__main__":

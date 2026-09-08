@@ -114,6 +114,7 @@ node ../hd-04/scripts/probe.mjs /hd-project15/ /hd-project15/energy.html …
 
 - 먼저 Windows에서 `server/start_server.bat`를 실행하고 `http://127.0.0.1:8765`에서 검증합니다.
 - 여러 PC 공개는 IT 승인과 접근 토큰 설정 뒤 `server/start_server_lan.bat`를 사용합니다.
+- 사내망 실행 창에 표시된 `http://사설IP:8765`로 접속하면 외부 GitHub·ChatGPT 주소 없이 화면과 API를 함께 사용합니다.
 - 화면은 서버 주소에서 직접 열고 `\\fileserver\facility\FacilityAI` 같은 UNC 경로를 입력합니다.
 - `공유폴더 읽기·쓰기 시험`을 통과한 뒤 매뉴얼·법령 파일을 업로드합니다.
 - 다른 PC가 먼저 저장하면 자동 덮어쓰지 않습니다. 설정에서 사용할 자료를 확인해 선택합니다.
@@ -142,7 +143,7 @@ node ../hd-04/scripts/probe.mjs /hd-project15/ /hd-project15/energy.html …
 ```sh
 node test/logic.test.js     # 날짜·법령·매뉴얼·공용 저장·에너지 규칙 검사 (108개)
 python3 test/jobs.test.py   # 자동 알림·법령 변경 기록 검사 (3개)
-python3 test/server.test.py # 공유 DB 충돌·백업·복원·권한·SMTP 검사 (13개)
+python3 test/server.test.py # 공유 DB 충돌·백업·복원·권한·SMTP·사내망 검사 (18개)
 node test/smoke.browser.js  # 열 화면과 주요 흐름을 실제로 띄운다
 python3 build.py            # 페이지 열 개를 다시 굽는다
 ```
