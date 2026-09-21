@@ -84,7 +84,6 @@ HEAD = """<!doctype html>
 </div></nav>
 
 <header class="hero"><div class="wrap">
-  <div class="eyebrow">HD 생성형 AI 업무자동화 전문가과정 · 기획 지준경</div>
   <h1>{title}</h1>
   <p>{desc}</p>
 </div></header>
