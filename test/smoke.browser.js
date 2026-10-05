@@ -402,9 +402,40 @@ function serve(port) {
        '건물 ID와 좌표 구조로 배치된다');
     ok(await page.locator('#campus-image').count() === 1 && await page.locator('#building-editor tbody tr').count() === bldgs,
        '조감도 배경 이미지와 건물 다각형을 화면에서 편집할 수 있다');
+    await page.locator('.map-help summary').click();
     ok(await page.isVisible('#campus-image-paste') && await page.isVisible('#campus-shared-load'),
        '조감도는 클립보드 이미지 또는 승인된 공유폴더 경로로도 불러올 수 있다');
     ok(await page.isVisible('#building-draw-start'), '건물 추가 버튼으로 새 다각형 그리기를 시작할 수 있다');
+    await page.locator('.map-help summary').click();
+    ok(await page.locator('#campus').evaluate(el => el.getBoundingClientRect().width > window.innerWidth * .9),
+       '조감도가 화면 너비 대부분을 사용한다');
+    await page.locator('#map-stroke-color').fill('#e04455');
+    await page.locator('#map-stroke-width').fill('4.5');
+    await page.locator('#map-style-apply').click();
+    ok(await page.locator('.campus-shape').first().evaluate(el => getComputedStyle(el).strokeWidth === '4.5px'
+      && getComputedStyle(el).stroke === 'rgb(224, 68, 85)'), '전체 건물 선 색상과 두께를 적용한다');
+    await page.locator('#building-editor input[name=strokeWidth]').first().fill('6');
+    await page.locator('#building-editor input[name=strokeColor]').first().fill('#119966');
+    await page.locator('#building-save').click();
+    await page.reload();
+    ok(await page.locator('.campus-shape').first().evaluate(el => getComputedStyle(el).strokeWidth === '6px'
+      && getComputedStyle(el).stroke === 'rgb(17, 153, 102)'), '개별 선 설정이 새로고침 후에도 유지된다');
+    await page.locator('.campus-shape').first().focus();
+    await page.keyboard.press('Enter');
+    ok((await page.textContent('#picked-title')).indexOf('설비') >= 0
+      && await page.locator('.campus-shape').first().getAttribute('aria-pressed') === 'true', '키보드로 건물을 선택한다');
+    await page.locator('#building-draw-start').click();
+    await page.locator('.campus-layout').scrollIntoViewIfNeeded();
+    var canvasRect = await page.locator('.campus-layout').boundingBox();
+    for (var point of [[.15,.2],[.25,.2],[.25,.35]]) {
+      await page.mouse.click(canvasRect.x + canvasRect.width * point[0], canvasRect.y + canvasRect.height * point[1]);
+    }
+    await page.locator('#building-draw-finish').click();
+    await page.locator('#building-save').click();
+    ok(await page.locator('.campus-shape').count() === bldgs + 1, '다각형을 추가하고 건물 목록에 저장한다');
+    await page.setViewportSize({ width: 380, height: 780 });
+    ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), '조감도 좁은 화면에서 페이지가 가로로 넘치지 않는다');
+    await page.setViewportSize({ width: 1180, height: 900 });
 
     group('9-1. 이용안내 — 각 메뉴 기능을 한 화면에서 설명한다');
     await go('guide.html');

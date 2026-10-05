@@ -17,6 +17,8 @@
   var selectedLawFile = null;
   var currentLawDocumentId = null;
   var buildingDraft = null;
+  var selectedBuildingId = null;
+  var campusAspectRatio = 16 / 9;
   var syncQueue = Promise.resolve();
 
   /* ────────────────────────────────────────────────────────── 도구 */
@@ -2081,6 +2083,7 @@
         canvas.width = Math.round(img.width * scale); canvas.height = Math.round(img.height * scale);
         canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
         db.settings.mapImageData = canvas.toDataURL('image/jpeg', 0.82);
+        campusAspectRatio = img.width / img.height;
         if (cacheDb()) {
           renderCampus();
           statusLine('#campus-image-status', true, (source || file.name || '조감도 이미지') + '를 적용했습니다.');
@@ -2103,6 +2106,49 @@
   }
 
   function initMap() {
+    var colorInput = $('#map-stroke-color'), widthInput = $('#map-stroke-width');
+    colorInput.value = /^#[0-9a-f]{6}$/i.test(db.settings.mapStrokeColor || '') ? db.settings.mapStrokeColor : '#154b6e';
+    widthInput.value = validStrokeWidth(db.settings.mapStrokeWidth);
+    function previewStyle() {
+      var style = currentMapStyle();
+      $('#map-line-preview').style.borderTop = style.strokeWidth + 'px solid ' + style.strokeColor;
+      var draft = $('.campus-draft');
+      if (draft) { draft.style.stroke = style.strokeColor; draft.style.strokeWidth = style.strokeWidth + 'px'; }
+    }
+    colorInput.addEventListener('input', previewStyle);
+    widthInput.addEventListener('input', previewStyle);
+    previewStyle();
+    $('#map-style-form').addEventListener('submit', function (event) {
+      event.preventDefault();
+      if (!this.reportValidity()) return;
+      var style = currentMapStyle();
+      db.settings.mapStrokeColor = style.strokeColor; db.settings.mapStrokeWidth = style.strokeWidth;
+      db.buildings.forEach(function (b) { Object.assign(b, style); });
+      if (persist()) {
+        renderCampus(); renderBuildingEditor();
+        statusLine('#map-style-status', true, '경계선을 적용했습니다. 새 건물도 같은 스타일로 만듭니다.');
+      }
+    });
+    var fullscreen = $('#campus-fullscreen'), workspace = $('#map-workspace');
+    fullscreen.addEventListener('click', function () {
+      if (!document.fullscreenElement && !workspace.classList.contains('expanded')) {
+        if (workspace.requestFullscreen) workspace.requestFullscreen().catch(function () { workspace.classList.add('expanded'); fullscreen.textContent = '화면 복귀'; });
+        else { workspace.classList.add('expanded'); fullscreen.textContent = '화면 복귀'; }
+      } else if (document.fullscreenElement) document.exitFullscreen();
+      else { workspace.classList.remove('expanded'); fullscreen.textContent = '전체 화면'; }
+    });
+    document.addEventListener('fullscreenchange', function () { fullscreen.textContent = document.fullscreenElement ? '화면 복귀' : '전체 화면'; });
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') { workspace.classList.remove('expanded'); fullscreen.textContent = '전체 화면'; }
+    });
+    $('.file-button').addEventListener('keydown', function (event) {
+      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); $('#campus-image').click(); }
+    });
+    if (db.settings.mapImageData) {
+      var savedImage = new Image();
+      savedImage.onload = function () { campusAspectRatio = savedImage.width / savedImage.height; renderCampus(); };
+      savedImage.src = db.settings.mapImageData;
+    }
     $('#campus-image').addEventListener('change', function () {
       var file = this.files && this.files[0]; if (!file) return;
       applyCampusImage(file, file.name); this.value = '';
@@ -2152,21 +2198,37 @@
     $('#building-draw-cancel').addEventListener('click', cancelBuildingDrawing);
     $('#building-draw-finish').addEventListener('click', finishBuildingDrawing);
     $('#building-save').addEventListener('click', function () {
-      var names = [], invalid = false;
+      var names = [], invalid = false, updates = [];
       $$('#building-editor tbody tr').forEach(function (tr) {
         var b = db.buildings.find(function (x) { return x.id === tr.getAttribute('data-id'); });
         if (!b) return;
         var input = tr.querySelector('[name=buildingName]'), name = input.value.trim();
         if (!name || names.indexOf(name) >= 0) { invalid = true; input.focus(); return; }
         names.push(name);
-        var old = b.name; b.name = name;
-        if (old !== name) db.equipments.forEach(function (e) { if (e.building === old) e.building = name; });
+        var width = tr.querySelector('[name=strokeWidth]');
+        if (!width.reportValidity()) { invalid = true; return; }
+        updates.push({ building: b, name: name, strokeColor: tr.querySelector('[name=strokeColor]').value,
+          strokeWidth: validStrokeWidth(width.value) });
       });
-      if (invalid) { statusLine('#building-status', false, '건물 이름은 비워둘 수 없고 서로 달라야 합니다.'); return; }
-      if (persist()) { statusLine('#building-status', true, '건물 이름과 다각형 좌표를 저장했습니다.'); renderCampus(); renderBuildingEditor(); }
+      if (invalid) { statusLine('#building-status', false, '건물 이름은 비워둘 수 없고 서로 달라야 하며, 선 두께는 1~10px 범위로 입력하세요.'); return; }
+      updates.forEach(function (u) {
+        var old = u.building.name;
+        Object.assign(u.building, { name: u.name, strokeColor: u.strokeColor, strokeWidth: u.strokeWidth });
+        if (old !== u.name) db.equipments.forEach(function (e) { if (e.building === old) e.building = u.name; });
+      });
+      if (persist()) { statusLine('#building-status', true, '건물 이름·다각형 좌표·선 설정을 저장했습니다.'); renderCampus(); renderBuildingEditor(); }
     });
     renderCampus();
     renderBuildingEditor();
+  }
+
+  function validStrokeWidth(value) {
+    var n = Number(value);
+    return Number.isFinite(n) && n >= 1 && n <= 10 ? n : 2;
+  }
+
+  function currentMapStyle() {
+    return { strokeColor: $('#map-stroke-color').value, strokeWidth: validStrokeWidth($('#map-stroke-width').value) };
   }
 
   function setDrawingButtons(on) {
@@ -2206,7 +2268,7 @@
     } else {
       var number = db.buildings.length + 1, name = '새 건물 ' + number;
       while (db.buildings.some(function (b) { return b.name === name; })) { number++; name = '새 건물 ' + number; }
-      building = Object.assign({ id: St.newId('b'), name: name, points: buildingDraft.points }, bounds);
+      building = Object.assign({ id: St.newId('b'), name: name, points: buildingDraft.points }, bounds, currentMapStyle());
       db.buildings.push(building);
     }
     buildingDraft = null; setDrawingButtons(false); cacheDb();
@@ -2221,6 +2283,8 @@
   function renderBuildingEditor() {
     $('#building-editor tbody').innerHTML = buildingRecords().map(function (b) {
       return '<tr data-id="' + esc(b.id) + '"><td><input class="building-name-input" name="buildingName" value="' + esc(b.name) + '" required></td>'
+        + '<td><input type="color" name="strokeColor" aria-label="' + esc(b.name) + ' 선 색상" value="' + esc(b.strokeColor || '#154b6e') + '"></td>'
+        + '<td><input type="number" name="strokeWidth" aria-label="' + esc(b.name) + ' 선 두께" min="1" max="10" step="0.5" value="' + validStrokeWidth(b.strokeWidth) + '"></td>'
         + '<td class="num">' + ((b.points || []).length) + '개</td><td><div class="btnrow">'
         + '<button class="btn small-btn" type="button" data-building-redraw="' + esc(b.id) + '">다시 그리기</button>'
         + '<button class="btn small-btn" type="button" data-building-delete="' + esc(b.id) + '">삭제</button></div></td></tr>';
@@ -2253,12 +2317,13 @@
     var shapes = bs.map(function (b) {
       var n = db.equipments.filter(function (e) { return e.building === b.name; }).length;
       var c = center(b.points || []);
-      return '<polygon class="campus-shape" data-b="' + esc(b.name) + '" data-building-id="' + esc(b.id) + '" points="' + pointsText(b.points) + '"><title>' + esc(b.name + ' · 설비 ' + n + '건') + '</title></polygon>'
+      return '<polygon class="campus-shape' + (selectedBuildingId === b.id ? ' on' : '') + '" role="button" tabindex="0" aria-label="' + esc(b.name + ' · 설비 ' + n + '건') + '" aria-pressed="' + (selectedBuildingId === b.id) + '" style="stroke:' + esc(b.strokeColor || '#154b6e') + ';stroke-width:' + validStrokeWidth(b.strokeWidth) + 'px" data-b="' + esc(b.name) + '" data-building-id="' + esc(b.id) + '" points="' + pointsText(b.points) + '"><title>' + esc(b.name + ' · 설비 ' + n + '건') + '</title></polygon>'
         + '<text class="campus-label" x="' + c.x.toFixed(2) + '" y="' + c.y.toFixed(2) + '">' + esc(b.name) + ' · ' + n + '</text>';
     }).join('');
-    var draft = buildingDraft ? '<polygon class="campus-draft" points="' + pointsText(buildingDraft.points) + '"></polygon>'
+    var style = currentMapStyle();
+    var draft = buildingDraft ? '<polygon class="campus-draft" style="stroke:' + style.strokeColor + ';stroke-width:' + style.strokeWidth + 'px" points="' + pointsText(buildingDraft.points) + '"></polygon>'
       + buildingDraft.points.map(function (p) { return '<circle class="campus-draft-point" cx="' + p.x + '" cy="' + p.y + '" r="1.1"></circle>'; }).join('') : '';
-    box.innerHTML = '<div class="campus-layout' + (buildingDraft ? ' drawing' : '') + '" aria-label="건물 다각형 배치">'
+    box.innerHTML = '<div class="campus-layout' + (buildingDraft ? ' drawing' : '') + '" style="aspect-ratio:' + campusAspectRatio + '" aria-label="건물 다각형 배치">'
       + '<svg viewBox="0 0 100 100" preserveAspectRatio="none">' + shapes + draft + '</svg>'
       + (!bs.length && !buildingDraft ? '<p class="sub campus-empty">건물 추가를 눌러 첫 건물의 외곽선을 그리세요.</p>' : '') + '</div>';
     if (db.settings.mapImageData) {
@@ -2277,13 +2342,21 @@
         + (buildingDraft.points.length >= 3 ? ' 다각형 완성을 누르세요.' : ' 최소 3개가 필요합니다.'));
     });
     $$('.campus-shape', box).forEach(function (btn) {
-      btn.addEventListener('click', function () {
+      function selectBuilding() {
         if (buildingDraft) return;
-        $$('.campus-shape', box).forEach(function (x) { x.classList.remove('on'); });
+        selectedBuildingId = btn.getAttribute('data-building-id');
+        $$('.campus-shape', box).forEach(function (x) { x.classList.remove('on'); x.setAttribute('aria-pressed', 'false'); });
         btn.classList.add('on');
+        btn.setAttribute('aria-pressed', 'true');
         showBuilding(btn.getAttribute('data-b'));
+      }
+      btn.addEventListener('click', selectBuilding);
+      btn.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectBuilding(); }
       });
     });
+    var selected = bs.find(function (b) { return b.id === selectedBuildingId; });
+    if (selected) showBuilding(selected.name);
   }
 
   function showBuilding(b) {

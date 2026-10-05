@@ -23,23 +23,23 @@ BASE = "https://aebonlee.github.io/hd-project15/"
 
 # (파일, 메뉴이름, 제목, 설명)
 MENU = [
-    ("index.html",     "개요",   "설비·에너지 통합 관리",
-     "지금 챙겨야 할 것부터 봅니다. 기한이 임박한 검사·교체와 올해 남은 비용."),
+    ("index.html",     "개요",   "운영 현황",
+     "검사·교체 일정과 정보 보완이 필요한 설비를 한눈에 확인합니다."),
     ("equipment.html", "설비",   "설비 등록·목록",
-     "설비 사양과 담당자, 관련 법령을 한 건씩 등록합니다. 여기 적은 값이 나머지 화면의 근거가 됩니다."),
-    ("managers.html",  "담당자", "담당자 통합 대장",
+     "설비 사양, 담당자, 매뉴얼과 관련 법령을 등록하고 관리합니다."),
+    ("managers.html",  "담당자", "담당자 관리",
      "법정선임관리자와 유지관리자의 연락처, 재직 상태, 담당 설비를 한 곳에서 관리합니다."),
     ("alerts.html",    "알림",   "검사·교체 알림",
      "법정검사와 소모품 교체 시기를 계산해 임박한 순서로 보여 줍니다."),
     ("history.html",   "이력",   "이력 관리",
      "교체·고장 AS·법정검사를 마칠 때마다 날짜와 금액을 남깁니다. 이 기록이 비용 예측의 근거입니다."),
-    ("cost.html",      "비용",   "차년도 비용 예측",
+    ("cost.html",      "비용",   "예상 비용",
      "등록된 주기와 단가로 내년에 돌아오는 항목과 금액을 셉니다."),
-    ("energy.html",    "에너지", "에너지 사용량 분석",
+    ("energy.html",    "에너지", "에너지 분석",
      "월별 고지서 PDF에서 사용량을 뽑아 그래프로 보고 엑셀로 내보냅니다."),
     ("map.html",       "조감도", "캠퍼스 조감도",
      "건물을 누르면 그 건물에 설치된 설비와 사양을 봅니다."),
-    ("settings.html",  "설정",   "저장소·AI 연결 설정",
+    ("settings.html",  "설정",   "연결 설정",
      "사내 공유폴더와 로컬 AI·외부 API 연결을 설정하고 권한을 시험합니다."),
     ("guide.html",     "이용안내", "이용안내",
      "각 메뉴에서 무엇을 할 수 있는지와 기본 사용 순서를 안내합니다."),
@@ -74,7 +74,7 @@ HEAD = """<!doctype html>
 <meta name="twitter:image" content="{base}{og}">
 <!-- === HD:META:END === -->
 </head>
-<body>
+<body data-page="{page}">
 
 <nav class="topnav"><div class="topnav-inner">
   <a class="topnav-brand" href="index.html">Facility AI<small>유틸리티 설비·에너지</small></a>
@@ -125,7 +125,7 @@ def build(fname, body, extra=""):
     if not os.path.exists(os.path.join(HERE, og)):
         og = "og-index.png"
     html = (HEAD.format(title=title, desc=desc, site=SITE, base=BASE,
-                        canon=canon, og=og, links=links)
+                        canon=canon, og=og, links=links, page=fname.replace(".html", ""))
             + body.strip() + "\n"
             + FOOT.format(site=SITE, extra=extra))
     p = os.path.join(HERE, fname)
@@ -200,7 +200,7 @@ PAGES["guide.html"] = """
   <article class="guide-card"><h3>이력</h3><p>법정검사·소모품 교체·고장 AS 완료일과 실제 비용을 기록합니다.</p><ul><li>완료한 검사 항목을 직접 선택</li><li>최근 완료일·다음 예정일·실제 단가 자동 갱신</li></ul><a class="btn small-btn" href="history.html">이력 열기</a></article>
   <article class="guide-card"><h3>비용</h3><p>등록된 검사·교체주기와 단가를 바탕으로 차년도 예상 비용을 계산합니다.</p><ul><li>검사·소모품 구분 합계</li><li>물가상승률·예비비 반영</li><li>예산 자료 엑셀 내보내기</li></ul><a class="btn small-btn" href="cost.html">비용 열기</a></article>
   <article class="guide-card"><h3>에너지</h3><p>전기·수도·가스·압축공기 사용량을 월별로 정리합니다.</p><ul><li>PDF·엑셀·붙여넣기 자료 읽기</li><li>보안 차단 시 승인된 공유폴더 경로로 불러오기</li><li>에너지원별 그래프 4개와 엑셀 내보내기</li></ul><a class="btn small-btn" href="energy.html">에너지 열기</a></article>
-  <article class="guide-card"><h3>조감도</h3><p>조감도 위에 건물 외곽을 다각형으로 그리고 건물별 설비를 조회합니다.</p><ul><li>이미지 선택·클립보드 붙여넣기·공유폴더 경로 불러오기</li><li>건물 추가·다시 그리기·이름 변경</li><li>건물 선택 후 설치 설비 확인</li></ul><a class="btn small-btn" href="map.html">조감도 열기</a></article>
+  <article class="guide-card"><h3>조감도</h3><p>넓은 조감도 위에 건물 외곽을 다각형으로 그리고 건물별 설비를 조회합니다.</p><ul><li>이미지 선택·클립보드 붙여넣기·공유폴더 경로 불러오기</li><li>전체 화면으로 확대하고 건물 추가·다시 그리기·이름 변경</li><li>전체 건물 또는 개별 건물의 선 색상·두께(1~10px) 설정</li><li>건물 선택 후 설치 설비 확인</li></ul><a class="btn small-btn" href="map.html">조감도 열기</a></article>
   <article class="guide-card"><h3>설정</h3><p>사내 저장소, 자동 점검과 승인된 AI·OCR·법령 API 연결을 관리합니다.</p><ul><li>공유폴더·공용 DB·백업 복원</li><li>로컬 AI 또는 외부 API 설정</li><li>자동 점검 실행 내역 확인</li></ul><a class="btn small-btn" href="settings.html">설정 열기</a></article>
   <article class="guide-card guide-warning"><h3>확인 원칙</h3><p>자동 분석은 담당자의 검토를 돕는 기능이며 법적 적합 여부를 확정하지 않습니다.</p><ul><li>검사주기는 설비 사양과 최신 법령 원문으로 최종 확인</li><li>외부 전송 전 사내 보안정책과 승인 여부 확인</li><li>메일은 승인 대기함에서 수신자와 내용을 확인한 뒤 발송</li></ul></article>
 </div>
@@ -561,52 +561,63 @@ PAGES["energy.html"] = """
 
 # ─────────────────────────────────────────────────────────── 조감도
 PAGES["map.html"] = """
-<div class="card">
-	  <h3 style="font-size:16px;margin-bottom:6px">건물 배치</h3>
-	  <p class="sub">건물을 누르면 그 건물의 설비가 아래에 나옵니다.
-	     건물은 설비에 적은 <b>건물</b> 값과 분리된 건물 ID·좌표로 배치됩니다.</p>
-  <div class="btnrow">
-    <label class="btn file-button" for="campus-image">조감도 이미지 선택</label>
+<section class="card map-workspace" id="map-workspace">
+  <div class="map-heading"><div><h2>건물 배치</h2><p class="sub">건물을 선택하면 연결된 설비를 확인할 수 있습니다.</p></div>
+    <button class="btn" id="campus-fullscreen" type="button">전체 화면</button>
+  </div>
+  <div class="map-toolbar">
+    <label class="btn file-button" for="campus-image" tabindex="0">이미지 선택</label>
     <input id="campus-image" type="file" accept="image/png,image/jpeg,image/webp">
-    <button class="btn" id="campus-image-paste" type="button">클립보드 이미지 붙여넣기</button>
-    <button class="btn" id="campus-image-clear" type="button">배경 이미지 제거</button>
+    <button class="btn" id="campus-image-paste" type="button">이미지 붙여넣기</button>
     <button class="btn primary" id="building-draw-start" type="button">+ 건물 추가</button>
     <button class="btn" id="building-draw-undo" type="button" hidden>마지막 점 취소</button>
     <button class="btn" id="building-draw-finish" type="button" hidden>다각형 완성</button>
     <button class="btn" id="building-draw-cancel" type="button" hidden>그리기 취소</button>
   </div>
-  <div class="security-import-panel compact">
-    <div><b>사내 공유폴더에서 조감도 불러오기</b><p class="sub">사내 보조 서버 설정 경로 안의 PNG·JPG·WebP 파일만 읽습니다.</p></div>
+  <form class="map-style-toolbar" id="map-style-form">
+    <label for="map-stroke-color">선 색상 <input id="map-stroke-color" type="color" value="#154b6e"></label>
+    <label for="map-stroke-width">선 두께 <input id="map-stroke-width" type="number" min="1" max="10" step="0.5" value="2"><span>px</span></label>
+    <span class="map-line-preview" id="map-line-preview" aria-hidden="true"></span>
+    <button class="btn" id="map-style-apply" type="submit">전체 건물에 적용</button>
+    <span class="sub">새 건물에도 적용됩니다.</span>
+  </form>
+  <details class="map-help">
+    <summary>사용법·이미지 불러오기</summary>
+    <p class="sub">이미지를 선택하거나 Ctrl+V로 붙여넣으세요. 건물 추가 후 외곽점을 3개 이상 순서대로 찍고 다각형 완성을 누릅니다. 아래 목록에서 건물 이름과 개별 선 스타일을 저장할 수 있습니다.</p>
+    <div class="security-import-panel compact">
+    <div><b>공유폴더에서 불러오기</b><p class="sub">사내 서버가 연결된 경우 설정된 공유폴더 내 PNG·JPG·WebP 파일을 읽습니다.</p></div>
     <div class="path-import-row">
       <label for="campus-shared-path">공유폴더 내 경로</label>
       <input id="campus-shared-path" placeholder="조감도\\울산캠퍼스.jpg">
       <button class="btn" id="campus-shared-load" type="button">경로에서 불러오기</button>
     </div>
-    <div id="campus-image-status" aria-live="polite"></div>
-  </div>
-  <p class="sub">건물 추가를 누른 뒤 조감도 위에서 건물 외곽점을 3개 이상 순서대로 찍고 다각형 완성을 누르세요. 클립보드 붙여넣기는 화면을 캡처한 뒤 버튼을 누르거나 이 화면에서 Ctrl+V를 사용합니다.</p>
+    </div>
+    <div class="btnrow"><button class="btn" id="campus-image-clear" type="button">배경 이미지 제거</button></div>
+    <p class="sub">배경 이미지를 제거해도 등록한 건물 영역과 설비는 유지됩니다.</p>
+  </details>
+  <div id="campus-image-status" aria-live="polite"></div>
+  <div id="map-style-status" aria-live="polite"></div>
   <div id="building-draw-status" aria-live="polite"></div>
   <div id="campus"></div>
-</div>
+</section>
 
+<div class="map-lower-grid">
 <div class="card">
-  <h2>건물 목록</h2>
-  <p class="sub">다각형 완성 후 건물 이름을 입력해 저장하세요. 이름을 바꾸면 해당 설비의 위치도 함께 변경됩니다.</p>
-  <div class="tablewrap"><table id="building-editor"><thead><tr><th>건물 이름</th><th>꼭짓점</th><th>관리</th></tr></thead><tbody></tbody></table></div>
-  <div class="btnrow"><button class="btn primary" id="building-save" type="button">건물 목록 저장</button></div>
+  <div class="map-heading"><div><h2>건물 목록</h2><p class="sub">이름과 경계선을 개별 설정합니다.</p></div>
+    <button class="btn primary" id="building-save" type="button">목록 저장</button>
+  </div>
+  <div class="tablewrap"><table id="building-editor"><thead><tr><th>건물 이름</th><th>선 색상</th><th>두께(px)</th><th>꼭짓점</th><th>관리</th></tr></thead><tbody></tbody></table></div>
   <div id="building-status"></div>
 </div>
-
-<h2 id="picked-title">건물을 고르세요</h2>
+<div class="card">
+<h2 id="picked-title">건물별 설비</h2>
+<p class="sub">조감도에서 건물을 선택하세요.</p>
 <div class="tablewrap"><table id="picked">
   <thead><tr><th>설비번호</th><th>설비명</th><th>종류</th><th>위치</th><th>사양</th>
     <th>소모전력</th><th>유지관리자</th><th>다음 검사</th></tr></thead>
   <tbody></tbody></table></div>
-
-	<div class="note">
-	  <b>실제 조감도 그림을 선택한 뒤</b> 위 좌표 편집표에서 건물 영역을 맞추세요.
-	  이미지가 없어도 좌표 네모와 건물별 설비 조회는 그대로 사용할 수 있습니다.
-	</div>
+</div>
+</div>
 """
 
 # ─────────────────────────────────────────────────────────── 설정
