@@ -204,6 +204,16 @@ eq(migrated.buildings[0].name, '본관', '  설비의 건물명으로 좌표 레
 ok(['x', 'y', 'w', 'h'].every(k => Number.isFinite(migrated.buildings[0][k])),
    '  조감도 좌표가 설비와 분리되어 있다');
 eq(migrated.buildings[0].points.length, 4, '  예전 사각형 좌표를 다각형 꼭짓점으로 자동 변환한다');
+eq(migrated.buildings[0].strokeWidth, 2, '  기존 건물에 기본 선 두께를 보완한다');
+const styledMap = St.normalize({ buildings: [{ id: 'b-style', name: '시험동', x: 10, y: 20, w: 30, h: 25,
+  strokeColor: '#e04455', strokeWidth: 4.5 }] });
+const syncedMap = St.applyShared(St.normalize({}), St.sharedPayload(styledMap), { revision: 1 });
+eq([syncedMap.buildings[0].strokeColor, syncedMap.buildings[0].strokeWidth], ['#e04455', 4.5],
+  '  건물별 선 스타일을 공용 서버 동기화 후에도 유지한다');
+eq(syncedMap.buildings[0].points, styledMap.buildings[0].points, '  선 설정으로 기존 건물 좌표가 바뀌지 않는다');
+const invalidStyle = St.normalize({ buildings: [{ name: '시험동', strokeColor: 'url(javascript:bad)', strokeWidth: -1 }] });
+eq([invalidStyle.buildings[0].strokeColor, invalidStyle.buildings[0].strokeWidth], ['#154b6e', 2],
+  '  잘못된 색상과 선 두께는 안전한 기본값으로 보완한다');
 const multiInspection = St.normalize({ equipments: [{ id: 'eq2', lastInspect: '2026-01-01', cycleMonths: 12, inspectCost: 1000 }] });
 eq(multiInspection.equipments[0].inspections[0].name, '정기검사', '  예전 단일 검사 값을 검사 배열로 자동 변환한다');
 eq(St.forEquipment([

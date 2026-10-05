@@ -41,7 +41,8 @@
       lawApiUrl: 'https://www.law.go.kr/DRF', lawApiOc: '',
       ocrApiUrl: 'https://api.upstage.ai/v1/document-digitization',
       inspectionLeadDays: 30, replacementLeadDays: 30, lawCheckEveryDays: 7,
-      costInflation: 3, costContingency: 5, mapImageData: ''
+      costInflation: 3, costContingency: 5, mapImageData: '',
+      mapStrokeColor: '#154b6e', mapStrokeWidth: 2
     },
     sync: { revision: 0, updatedAt: null, updatedBy: '', deviceName: '', conflict: false,
       enabled: false, serverEmpty: false },
@@ -95,7 +96,10 @@
       var out = {
         id: b.id || buildingId(name),
         name: name,
-        x: x, y: y, w: w, h: h, points: points
+        x: x, y: y, w: w, h: h, points: points,
+        strokeColor: /^#[0-9a-f]{6}$/i.test(b.strokeColor || '') ? b.strokeColor : '#154b6e',
+        strokeWidth: Number.isFinite(Number(b.strokeWidth)) && Number(b.strokeWidth) >= 1
+          && Number(b.strokeWidth) <= 10 ? Number(b.strokeWidth) : 2
       };
       if (name) known[name] = true;
       return out;
@@ -134,6 +138,7 @@
       var i = d.buildings.length, col = i % 4, row = Math.floor(i / 4);
       d.buildings.push({
         id: buildingId(name), name: name,
+        strokeColor: '#154b6e', strokeWidth: 2,
         x: 4 + col * 24, y: 8 + row * 30, w: 20, h: 22,
         points: [{ x: 4 + col * 24, y: 8 + row * 30 }, { x: 24 + col * 24, y: 8 + row * 30 },
           { x: 24 + col * 24, y: 30 + row * 30 }, { x: 4 + col * 24, y: 30 + row * 30 }]
