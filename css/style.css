@@ -354,3 +354,12 @@ input[type=color]{width:44px;height:36px;padding:3px;border:1px solid #bdcbd7;bo
   .campus-layout{min-height:320px;}.campus-label{font-size:2.6px;}
   .map-workspace:fullscreen .campus-layout,.map-workspace.expanded .campus-layout{min-height:55vh;}
 }
+
+/* 사내 AI와 고지서 검토 */
+#energy-review { margin-top: 20px; padding: 18px; border: 1px solid var(--line, #d6e1e8); border-radius: 12px; }
+#energy-review input[type=number] { min-width: 120px; }
+#energy-review input[data-field=unit] { width: 95px; }
+#energy-review .energy-uncertain { background: #fff4d8; }
+#energy-review td { vertical-align: top; }
+.law-chat-message details ul { max-height: 320px; overflow: auto; padding-right: 12px; }
+#ai-status { margin-top: 10px; }

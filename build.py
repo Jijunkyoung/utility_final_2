@@ -106,6 +106,7 @@ FOOT = """</div></main>
 <script src="js/energy.js"></script>
 <script src="js/analysis.js"></script>
 <script src="js/integration.js"></script>
+<script src="js/assistant.js"></script>
 <script src="js/app.js"></script>
 {extra}
 </body>
@@ -161,15 +162,16 @@ PAGES["index.html"] = """
 </div>
 
 <section class="card law-chat-card" aria-labelledby="law-chat-title">
-  <p class="eyebrow">저장 법령·국가법령정보센터 연계</p>
-  <h2 id="law-chat-title">법령 질의 도우미</h2>
-  <p class="sub">설비 종류와 용량 등 조건을 함께 질문하면 관련 법령 후보와 확인해야 할 기준을 안내합니다.</p>
+  <p class="eyebrow">법령 · 설비 · 사용량</p>
+  <h2 id="law-chat-title">업무 질의 도우미</h2>
+  <p class="sub">저장된 설비 사양·월별 사용량과 법령 원문에서 답변 근거를 찾습니다. 사내 AI를 연결하면 검색 결과를 함께 설명합니다.</p>
   <div id="law-chat-log" class="law-chat-log" aria-live="polite">
     <div class="law-chat-message assistant">예: 우리 회사의 전기용량은 22,900 kW인데 안전관리자 선임기준이 어떻게 돼?</div>
   </div>
   <form id="law-chat-form" class="law-chat-form">
+    <label>검색 범위 <select id="question-scope"><option value="all">전체</option><option value="law">법령</option><option value="equipment">설비</option><option value="energy">사용량</option></select></label>
     <label class="sr-only" for="law-question">법령 질문</label>
-    <textarea id="law-question" rows="3" required placeholder="설비 종류, 용량, 압력, 설치 장소 등 판단에 필요한 조건을 함께 적어 주세요."></textarea>
+    <textarea id="law-question" rows="3" required placeholder="예: 공기압축기 사양 보여줘 / 2026년 7월 전력 사용량은? / 전기 안전관리자 선임기준은?"></textarea>
     <button class="btn primary" type="submit">질문하기</button>
   </form>
   <div class="note"><b>법적 판단 보조 기능입니다.</b> 답변의 법령명·조문·시행일을 원문에서 최종 확인한 뒤 업무에 적용하세요.</div>
@@ -525,7 +527,9 @@ PAGES["energy.html"] = """
   <input type="file" id="file" accept=".pdf,.csv,.xlsx,.xls" multiple>
   <ul class="filelist" id="files"></ul>
   <div id="read-note"></div>
-  <p class="sub">스캔 이미지 PDF에서 글자가 추출되지 않으면, 사내 서버에 설정된 OCR API로 한 번 더 읽습니다. 외부 OCR 사용 전 회사 보안 승인을 확인하세요.</p>
+  <p class="sub">PDF 추출값은 검토 후 적용합니다. 계약전력·검침값·요금과 실제 사용량을 원문에서 대조하세요. 사내 비전 모델을 연결하면 이미지와 표를 다시 읽을 수 있습니다.</p>
+  <label class="check-label"><input id="energy-vision" type="checkbox"> 사내 비전 모델로 PDF 다시 읽기 (최대 10페이지)</label>
+  <section id="energy-review" hidden aria-live="polite"></section>
   <div class="btnrow">
     <button class="btn" id="paste-toggle" type="button" aria-controls="paste-panel" aria-expanded="false">글로 붙여넣기</button>
     <button class="btn" id="energy-xlsx" disabled>엑셀로 내보내기</button>
@@ -694,7 +698,15 @@ PAGES["settings.html"] = """
     <h2>AI 분석 방식</h2>
     <p class="sub">법령·매뉴얼은 규칙 분석을 기본으로 하며, 허용된 환경에서는 로컬 AI 또는 외부 API를 선택할 수 있습니다.</p>
     <form id="ai-settings" class="grid-form settings-form">
-      <label>분석 모드 <select name="aiMode"><option value="rules">규칙 기반만</option><option value="local">로컬 AI</option><option value="external">외부 API</option><option value="auto">로컬 우선 자동 선택</option></select></label>
+      <label>분석 모드 <select name="aiMode"><option value="rules">규칙 기반만</option><option value="internal">사내 LLM API</option><option value="local">로컬 AI (Ollama)</option><option value="external">외부 API</option><option value="auto">로컬 우선 자동 선택</option></select></label>
+      <label>사내 API 주소 <input name="internalAiUrl" placeholder="회사 안내의 기본 주소 또는 /v1/chat/completions"></label>
+      <label>텍스트 모델 ID <input name="internalAiModel" placeholder="qwen3-8-27b · 회사 표기 그대로 입력"></label>
+      <label>비전 모델 ID <input name="internalVisionModel" placeholder="qwen3-vl-8b-instruct"></label>
+      <label>인증 방식 <select name="internalAuthMode"><option value="bearer">Bearer API KEY</option><option value="headers">회사 지정 KEY·SECRET 헤더</option></select></label>
+      <label>API KEY 헤더명 <input name="internalKeyHeader" placeholder="헤더 방식일 때 회사 안내의 이름"></label>
+      <label>SECRET KEY 헤더명 <input name="internalSecretHeader" placeholder="회사 안내의 이름 · 임의로 정하지 마세요"></label>
+      <label>사내 API KEY <input name="internalApiKey" type="password" autocomplete="new-password" placeholder="서버에 저장 · 빈칸이면 기존 키 유지"></label>
+      <label>사내 SECRET KEY <input name="internalSecretKey" type="password" autocomplete="new-password" placeholder="회사 인증 방식에서 요구할 때만 입력"></label>
       <label>로컬 AI 주소 <input name="localAiUrl" placeholder="http://127.0.0.1:11434"></label>
       <label>로컬 AI 모델 <input name="localAiModel" placeholder="예: qwen2.5:7b-instruct-q4_K_M"></label>
       <label>외부 API 주소 <input name="externalAiUrl" placeholder="OpenAI 호환 /v1/chat/completions 주소"></label>
@@ -702,6 +714,9 @@ PAGES["settings.html"] = """
       <label>외부 API 키 <input name="externalApiKey" type="password" autocomplete="new-password" placeholder="서버에만 저장 · 화면에는 다시 표시하지 않음"></label>
       <label class="check-label"><input name="allowExternalFallback" type="checkbox"> 로컬 AI 실패 시 외부 전송 허용</label>
     </form>
+    <div class="btnrow"><button class="btn primary" id="ai-apply" type="button">설정 적용</button><button class="btn" id="ai-test" type="button">사내 AI 연결 시험</button></div>
+    <div id="ai-status" role="status"></div>
+    <details class="map-help"><summary>사내 API 연결 방법</summary><p>사내 LLM API를 선택하고 회사 API 주소·정확한 모델 ID·인증 방식을 입력한 뒤 설정 적용을 누르세요. API KEY와 SECRET KEY는 서버에만 저장됩니다. 빈칸으로 적용하면 기존 키를 유지합니다. SECRET KEY가 토큰 발급 또는 서명에 쓰이는 방식이면 회사 호출 예시를 확인해 연결 코드를 맞춰야 합니다. 두 키를 임의의 헤더로 전송하지 마세요.</p></details>
     <div class="security-note">외부 전송 허용 전 회사 보안정책을 확인하세요. API 키와 원문은 GitHub나 브라우저 저장소에 기록하지 않습니다.</div>
   </section>
 

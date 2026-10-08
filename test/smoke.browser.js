@@ -455,7 +455,68 @@ function serve(port) {
     });
     ok(over <= 1, '가로 스크롤이 생기지 않는다 (넘침 ' + over + 'px)');
 
-    group('11. 콘솔에 오류가 없다');
+    group('11. 사내 AI 설정·통합 질의·PDF 검토');
+    var appliedSettings;
+    await page.route('**/api/**', async function (route) {
+      var req = route.request(), pathName = new URL(req.url()).pathname;
+      var value = {ok:true};
+      if (pathName === '/api/settings' && req.method() === 'POST') { appliedSettings = req.postDataJSON(); value.saved = true; }
+      if (pathName === '/api/settings' && req.method() === 'GET') value.settings = {};
+      if (pathName === '/api/ai/test') value = {ok:true,connected:true,model:'qwen3-8-27b'};
+      if (pathName === '/api/state') value = {ok:true,data:null,revision:0};
+      if (pathName === '/api/analyze') value.result = {answer:'저장된 설비 사양을 확인했습니다.'};
+      if (pathName === '/api/energy/extract') value.result = {rows:[{ym:'2099-02',kind:'전력',usage:null,unit:'kWh',page:1,evidence:'사용량 판독 불가',confidence:'low'}],warnings:['숫자 확인 필요']};
+      await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(value)});
+    });
+    await page.evaluate(function () { var data = Store.load(); data.settings.serverUrl = location.origin; Store.save(data); });
+    await go('settings.html');
+    await page.selectOption('#ai-settings [name=aiMode]', 'internal');
+    await page.fill('#ai-settings [name=internalAiUrl]', 'https://company.invalid/v1');
+    await page.fill('#ai-settings [name=internalAiModel]', 'qwen3-8-27b');
+    await page.fill('#ai-settings [name=internalVisionModel]', 'qwen3-vl-8b-instruct');
+    await page.selectOption('#ai-settings [name=internalAuthMode]', 'headers');
+    await page.fill('#ai-settings [name=internalKeyHeader]', 'X-Company-Key');
+    await page.fill('#ai-settings [name=internalSecretHeader]', 'X-Company-Secret');
+    await page.fill('#ai-settings [name=internalApiKey]', 'test-key');
+    await page.fill('#ai-settings [name=internalSecretKey]', 'test-secret');
+    await page.click('#ai-apply');
+    await page.waitForFunction(function () { return document.querySelector('#ai-status').textContent.indexOf('설정 적용 완료') >= 0; });
+    ok(appliedSettings.internalSecretKey === 'test-secret', '설정 적용은 키를 서버 요청으로 전달');
+    ok(await page.evaluate(function () { return !Store.load().settings.internalApiKey && !Store.load().settings.internalSecretKey; }), '키는 브라우저 저장 자료에 포함하지 않음');
+    ok((await page.inputValue('#ai-settings [name=internalApiKey]')) === '', '저장 성공 후 키 입력란을 비움');
+    await page.click('#ai-test');
+    await page.waitForFunction(function () { return document.querySelector('#ai-status').textContent.indexOf('연결 성공') >= 0; });
+    ok((await page.textContent('#ai-status')).indexOf('qwen3-8-27b') >= 0, '사내 AI 연결 시험 결과를 표시');
+    await go('index.html');
+    await page.selectOption('#question-scope', 'equipment');
+    await page.fill('#law-question', '전체 설비 목록 보여줘');
+    await page.click('#law-chat-form button[type=submit]');
+    await page.waitForFunction(function () { return document.querySelector('#law-chat-log').textContent.indexOf('조회 근거') >= 0; });
+    ok((await page.textContent('#law-chat-log')).indexOf('저장된 설비 사양') >= 0, '법령 원문이 없어도 설비 질문에 AI 호출');
+    await go('energy.html');
+    var beforeEnergy = await page.evaluate(function () { return Store.load().energy.length; });
+    function simplePdf() {
+      var content = 'BT /F1 12 Tf 30 750 Td (2099-01 power usage 100 kWh) Tj ET';
+      var objs = ['<< /Type /Catalog /Pages 2 0 R >>','<< /Type /Pages /Kids [3 0 R] /Count 1 >>','<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>','<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>','<< /Length ' + content.length + ' >>\nstream\n' + content + '\nendstream'];
+      var pdf = '%PDF-1.4\n', offsets = [0];
+      objs.forEach(function (o,i) { offsets.push(Buffer.byteLength(pdf)); pdf += (i+1) + ' 0 obj\n' + o + '\nendobj\n'; });
+      var xref = Buffer.byteLength(pdf); pdf += 'xref\n0 6\n0000000000 65535 f \n' + offsets.slice(1).map(function (n) { return String(n).padStart(10,'0') + ' 00000 n \n'; }).join('');
+      return Buffer.from(pdf + 'trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n' + xref + '\n%%EOF');
+    }
+    await page.setInputFiles('#file', {name:'review.pdf',mimeType:'application/pdf',buffer:simplePdf()});
+    await page.waitForSelector('[data-review-row]');
+    ok((await page.evaluate(function () { return Store.load().energy.length; })) === beforeEnergy, 'PDF 추출만으로 사용량이 저장되지 않음');
+    await page.check('[data-review-row] [data-field=selected]');
+    await page.click('#energy-review-apply');
+    ok(await page.evaluate(function () { return Store.load().energy.some(function (r) { return r.ym === '2099-01' && r.usage === 100 && r.reviewed; }); }), '원문 대조 후 선택값만 적용');
+    await page.check('#energy-vision');
+    await page.setInputFiles('#file', {name:'vision.pdf',mimeType:'application/pdf',buffer:simplePdf()});
+    await page.waitForSelector('.energy-uncertain');
+    await page.check('[data-review-row] [data-field=selected]');
+    await page.click('#energy-review-apply');
+    ok((await page.textContent('#energy-review-status')).indexOf('사용량 확인') >= 0, '미확인 비전 값을 0으로 저장하지 않고 차단');
+
+    group('12. 콘솔에 오류가 없다');
     ok(errors.length === 0, '자바스크립트 오류 없음', errors.slice(0, 3).join(' | '));
     /* 이 서버가 못 내준 파일이 있으면 앱이 아니라 테스트가 틀린 것이다 */
     ok(missed.length === 0, '테스트 서버가 필요한 파일을 다 내줬다', missed.join(', '));

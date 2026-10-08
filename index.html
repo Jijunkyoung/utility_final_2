@@ -75,15 +75,16 @@
 </div>
 
 <section class="card law-chat-card" aria-labelledby="law-chat-title">
-  <p class="eyebrow">저장 법령·국가법령정보센터 연계</p>
-  <h2 id="law-chat-title">법령 질의 도우미</h2>
-  <p class="sub">설비 종류와 용량 등 조건을 함께 질문하면 관련 법령 후보와 확인해야 할 기준을 안내합니다.</p>
+  <p class="eyebrow">법령 · 설비 · 사용량</p>
+  <h2 id="law-chat-title">업무 질의 도우미</h2>
+  <p class="sub">저장된 설비 사양·월별 사용량과 법령 원문에서 답변 근거를 찾습니다. 사내 AI를 연결하면 검색 결과를 함께 설명합니다.</p>
   <div id="law-chat-log" class="law-chat-log" aria-live="polite">
     <div class="law-chat-message assistant">예: 우리 회사의 전기용량은 22,900 kW인데 안전관리자 선임기준이 어떻게 돼?</div>
   </div>
   <form id="law-chat-form" class="law-chat-form">
+    <label>검색 범위 <select id="question-scope"><option value="all">전체</option><option value="law">법령</option><option value="equipment">설비</option><option value="energy">사용량</option></select></label>
     <label class="sr-only" for="law-question">법령 질문</label>
-    <textarea id="law-question" rows="3" required placeholder="설비 종류, 용량, 압력, 설치 장소 등 판단에 필요한 조건을 함께 적어 주세요."></textarea>
+    <textarea id="law-question" rows="3" required placeholder="예: 공기압축기 사양 보여줘 / 2026년 7월 전력 사용량은? / 전기 안전관리자 선임기준은?"></textarea>
     <button class="btn primary" type="submit">질문하기</button>
   </form>
   <div class="note"><b>법적 판단 보조 기능입니다.</b> 답변의 법령명·조문·시행일을 원문에서 최종 확인한 뒤 업무에 적용하세요.</div>
@@ -103,6 +104,7 @@
 <script src="js/energy.js"></script>
 <script src="js/analysis.js"></script>
 <script src="js/integration.js"></script>
+<script src="js/assistant.js"></script>
 <script src="js/app.js"></script>
 
 </body>

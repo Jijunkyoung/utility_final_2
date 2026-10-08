@@ -1,4 +1,5 @@
 import json
+import zipfile
 import tempfile
 import threading
 import unittest
@@ -12,6 +13,7 @@ from urllib.request import Request, urlopen
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "server"))
 import facility_server as server
+import update_from_zip as updater
 
 
 class FacilityServerTest(unittest.TestCase):
@@ -31,6 +33,73 @@ class FacilityServerTest(unittest.TestCase):
         self.assertEqual(data["smtpPassword"], "mail-secret")
         self.assertEqual(data["sharedPath"], str(share))
         self.assertEqual(server.DEFAULTS["apiToken"], "")
+
+    def test_vm_update_preserves_config_database_and_backs_up_app(self):
+        target = self.root / "facility-ai"
+        (target / "server" / "data").mkdir(parents=True)
+        (target / "server" / "facility_server.py").write_text("old-app")
+        config = target / "server" / "config.local.json"; config.write_text("private-config")
+        data = target / "server" / "data" / "facility-ai.db"; data.write_text("private-data")
+        archive = self.root / "main.zip"
+        with zipfile.ZipFile(archive, "w") as z:
+            z.writestr("utility_final_2-main/server/facility_server.py", "new-app")
+            z.writestr("utility_final_2-main/server/config.local.json", "should-not-copy")
+            z.writestr("utility_final_2-main/server/data/facility-ai.db", "should-not-copy")
+            z.writestr("utility_final_2-main/../outside.html", "should-not-copy")
+        backup = updater.update(archive, target)
+        self.assertEqual(config.read_text(), "private-config")
+        self.assertEqual(data.read_text(), "private-data")
+        self.assertEqual((backup / "server" / "facility_server.py").read_text(), "old-app")
+        self.assertEqual((target / "server" / "facility_server.py").read_text(), "new-app")
+        self.assertFalse((self.root / "outside.html").exists())
+
+    def test_internal_bearer_and_configured_secret_headers(self):
+        cfg = {"internalApiKey": "test-key", "internalSecretKey": "test-secret", "internalAuthMode": "headers",
+               "internalKeyHeader": "X-Company-Key", "internalSecretHeader": "X-Company-Secret"}
+        self.assertEqual(server.internal_headers(cfg), {"X-Company-Key": "test-key", "X-Company-Secret": "test-secret"})
+        with self.assertRaisesRegex(ValueError, "SECRET KEY"):
+            server.internal_headers({"internalApiKey": "test-key", "internalSecretKey": "test-secret"})
+        with self.assertRaises(ValueError):
+            server.internal_headers({**cfg, "internalKeyHeader": "Host"})
+        self.assertEqual(server.internal_headers({"internalApiKey": "test-key"}), {"Authorization": "Bearer test-key"})
+
+    def test_internal_analysis_normalizes_endpoint_and_parses_fenced_json(self):
+        cfg = {"aiMode": "internal", "internalAiUrl": "https://company.invalid/v1/", "internalAiModel": "qwen3-8-27b", "internalApiKey": "test-key"}
+        response = {"choices": [{"message": {"content": '```json\n{"answer":"100 kWh"}\n```'}}]}
+        with mock.patch.object(server, "json_request", return_value=response) as call:
+            result, provider = server.analyze(cfg, {"kind": "facility_question", "equipment": {"question": "7월 사용량?"}, "text": "100 kWh"})
+        self.assertEqual(result["answer"], "100 kWh")
+        self.assertEqual(provider, "internal:qwen3-8-27b")
+        self.assertEqual(call.call_args.args[0], "https://company.invalid/v1/chat/completions")
+        self.assertEqual(call.call_args.args[1]["model"], "qwen3-8-27b")
+
+    def test_internal_keys_stay_server_only_and_blank_apply_preserves_keys(self):
+        server.save_config({"internalApiKey": "test-key", "internalSecretKey": "test-secret"})
+        server.save_config({"internalApiKey": "", "internalSecretKey": ""})
+        self.assertEqual(server.load_config()["internalSecretKey"], "test-secret")
+        httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
+        thread = threading.Thread(target=httpd.serve_forever, daemon=True); thread.start()
+        try:
+            with urlopen(f"http://127.0.0.1:{httpd.server_address[1]}/api/settings", timeout=2) as response:
+                value = json.load(response)
+            self.assertTrue(value["hasInternalApiKey"])
+            self.assertTrue(value["hasInternalSecretKey"])
+            self.assertNotIn("internalApiKey", value["settings"])
+            self.assertNotIn("test-secret", json.dumps(value))
+        finally:
+            httpd.shutdown(); httpd.server_close(); thread.join(timeout=2)
+
+    def test_vision_sends_images_to_vision_model_without_automatic_save(self):
+        cfg = {"internalAiUrl": "https://company.invalid/v1", "internalVisionModel": "qwen3-vl-8b-instruct", "internalApiKey": "test-key"}
+        payload = {"pages": [{"image": "data:image/jpeg;base64,/9j/"}]}
+        response = {"choices": [{"message": {"content": '{"rows":[{"ym":"2026-07","usage":100}]}'}}]}
+        with mock.patch.object(server, "json_request", return_value=response) as call:
+            result = server.extract_energy(cfg, payload)
+        self.assertTrue(result["reviewRequired"])
+        self.assertEqual(call.call_args.args[1]["model"], "qwen3-vl-8b-instruct")
+        self.assertEqual(call.call_args.args[1]["messages"][0]["content"][2]["type"], "image_url")
+        with self.assertRaises(ValueError):
+            server.extract_energy(cfg, {"pages": payload["pages"] * 11})
 
     def test_lan_requires_real_32_character_token(self):
         self.assertIn("32자", server.lan_token_error({"apiToken": "short"}))

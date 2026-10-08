@@ -365,6 +365,23 @@ g = E.parseUsage(`
 eq(g.rows.map(r => r.ym), ['2026-01', '2026-03'], '연월 순으로 정렬');
 
 /* ── 결과 ────────────────────────────────────────────────────────── */
+const Assistant = require('../js/assistant.js');
+const facts = {equipments: [{code:'C1',name:'공기압축기',kind:'압축공기',flow:27.2,place:'1층'}, {code:'P1',name:'급수펌프'}], energy:[
+  {ym:'2026-07',kind:'전력',usage:100,unit:'kWh'}, {ym:'2026-08',kind:'전력',usage:200,unit:'kWh'},
+  {ym:'2026-07',kind:'전력',usage:1,unit:'MWh'}, {ym:'2026-07',kind:'가스',usage:30,unit:'Nm3'}]};
+let found = Assistant.search(facts, '2026년 7월 전력 사용량', 'energy');
+eq(found.energyCount, 2, '사용량 질문은 연월·종류로 조회');
+eq(found.totals, {'전력|kWh':100,'전력|MWh':1}, '서로 다른 단위를 합치지 않는다');
+eq(Assistant.search(facts, '공기압축기 사양 보여줘', 'equipment').equipments[0].flow, 27.2, '사양을 질문 근거로 제공');
+eq(Assistant.search(facts, '존재하지않는장비 찾아줘', 'equipment').equipmentCount, 0, '없는 설비를 전체 목록으로 대체하지 않는다');
+eq(Assistant.search(facts, '선임기준', 'law').energyCount, 0, '법령 전용 조회는 사용량을 제외');
+ok(Assistant.reviewRows([{ym:'2026-13',kind:'전력',usage:null,unit:'kWh'}])[0].warnings.length >= 2, '미확인 추출값은 경고');
+ok(Assistant.reviewRows([{ym:'2026-07',kind:'전력',usage:0,unit:'kWh',source:'사용량 0 kWh'}])[0].warnings.length === 0, '실제 0과 미확인을 구분');
+eq(St.normalize({settings:{internalApiKey:'never-cache',internalSecretKey:'never-cache'}}).settings.internalApiKey, undefined, '사내 키를 브라우저 저장에서 제외');
+eq(E.parseUsage('2026년 7월 계약전력 500 kWh 당월 사용량 12,000 kWh').rows[0].usage,12000, '사용량 라벨을 계약값보다 우선');
+eq(E.parseUsage('2026년 7월 검침지침 900 kWh').rows.length,0, '검침지침을 사용량으로 추측하지 않는다');
+eq(E.parseUsage('2026년 7월 전력 100 kWh\n2026년 7월 전력 120 kWh').candidates.length,2, 'PDF 검토에서는 서로 다른 중복 후보를 모두 보존');
+eq(E.pdfTextItems([{str:'2026년 7월',transform:[1,0,0,1,10,100]}, {str:'사용량 100 kWh',transform:[1,0,0,1,120,99]}]), '2026년 7월 사용량 100 kWh', 'PDF 글자 높이 오차를 같은 줄로 묶는다');
 console.log('─'.repeat(62));
 if (fails.length) {
   fails.forEach(f => console.log('  ❌ ' + f));
