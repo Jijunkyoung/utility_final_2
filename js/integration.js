@@ -46,10 +46,12 @@
   }
 
   function health(settings) { return request(settings, '/api/health'); }
-  function saveSettings(settings, apiKey, ocrApiKey) {
+  function saveSettings(settings, apiKey, ocrApiKey, internalApiKey, internalSecretKey) {
     var payload = {}; Object.keys(settings || {}).forEach(function (k) { payload[k] = settings[k]; });
     if (apiKey) payload.externalApiKey = apiKey;
     if (ocrApiKey) payload.ocrApiKey = ocrApiKey;
+    if (internalApiKey) payload.internalApiKey = internalApiKey;
+    if (internalSecretKey) payload.internalSecretKey = internalSecretKey;
     delete payload.serverToken;
     return request(settings, '/api/settings', { method: 'POST', headers: jsonHeaders(settings), body: JSON.stringify(payload) });
   }
@@ -100,14 +102,19 @@
     return request(settings, '/api/laws/query', { method: 'POST', headers: jsonHeaders(settings),
       body: JSON.stringify({ law: law }) }, 60000);
   }
-  function askLaw(settings, question, candidates) {
+  function askLaw(settings, question, candidates, context) {
     return request(settings, '/api/analyze', { method: 'POST', headers: jsonHeaders(settings), body: JSON.stringify({
-      kind: 'law_question', equipment: { question: question },
+      kind: 'facility_question', equipment: { question: question },
       text: (candidates || []).map(function (d) {
         return '[법령] ' + (d.law || '') + '\n[연관 내용] ' + (d.about || '') + '\n[시행일] '
           + (d.effectiveDate || '') + '\n[원문] ' + (d.content || '');
-      }).join('\n\n'), mode: settings.aiMode, allowExternalFallback: !!settings.allowExternalFallback
+      }).join('\n\n') + '\n[조회된 설비·사용량 기록]\n' + JSON.stringify(context || {}), mode: settings.aiMode, allowExternalFallback: !!settings.allowExternalFallback
     }) }, 180000);
+  }
+  function aiTest(settings) { return request(settings, '/api/ai/test', { method: 'POST', headers: jsonHeaders(settings), body: '{}' }, 180000); }
+  function getSettings(settings) { return request(settings, '/api/settings'); }
+  function extractEnergy(settings, pages) {
+    return request(settings, '/api/energy/extract', { method: 'POST', headers: jsonHeaders(settings), body: JSON.stringify({ pages: pages }) }, 180000);
   }
   function saveAnalysis(settings, analysis) {
     return request(settings, '/api/analyses', { method: 'POST', headers: jsonHeaders(settings), body: JSON.stringify(analysis) });
@@ -146,7 +153,7 @@
         approvedAt: notification.approvedAt, approvedBy: notification.approvedBy }) }, 30000);
   }
 
-  return { health: health, saveSettings: saveSettings, testStorage: testStorage,
+  return { health: health, saveSettings: saveSettings, testStorage: testStorage, aiTest: aiTest, getSettings: getSettings, extractEnergy: extractEnergy,
     upload: upload, readSharedFile: readSharedFile, analyze: analyze, saveLaw: saveLaw, importLaw: importLaw, queryLaw: queryLaw, askLaw: askLaw, saveAnalysis: saveAnalysis,
     loadState: loadState, saveState: saveState, audit: audit, backup: backup, backups: backups,
     restore: restore, jobs: jobs, runJobs: runJobs, ocr: ocr,

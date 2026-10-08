@@ -300,8 +300,18 @@
     ev.preventDefault();
     var input = $('#law-question'), question = input.value.trim(); if (!question) return;
     appendLawChat('user', esc(question)); input.value = '';
-    var candidates = L.questionCandidates(question, db.lawDocuments || []);
-    var pending = appendLawChat('assistant', '관련 법령과 저장된 원문을 확인하고 있습니다…');
+    var scope = $('#question-scope').value;
+    var context = window.FacilityAssistant.search(db, question, scope);
+    var candidates = (scope === 'equipment' || scope === 'energy') ? [] : L.questionCandidates(question, db.lawDocuments || []);
+    var pending = appendLawChat('assistant', '설비·사용량·법령 근거를 확인하고 있습니다…');
+    function recordsAnswer() {
+      var out = '<details open><summary>조회 근거 · 설비 ' + context.equipmentCount + '건 / 사용량 ' + context.energyCount + '건</summary>';
+      if (context.equipments.length) out += '<p><a href="equipment.html">설비 목록 열기</a></p><ul>' + context.equipments.map(function (e) { return '<li>' + esc(JSON.stringify(e)) + '</li>'; }).join('') + '</ul>';
+      if (context.energy.length) out += '<p><a href="energy.html">사용량 열기</a> · ' + esc(context.range) + '</p><ul>' + context.energy.map(function (e) { return '<li>' + esc(e.ym) + ' ' + esc(e.kind) + ': ' + esc(e.usage) + ' ' + esc(e.unit) + ' <span class="sub">' + esc(e.source) + '</span></li>'; }).join('') + '</ul><p>조회 기록 합계: ' + esc(JSON.stringify(context.totals)) + '</p>';
+      if (!context.equipmentCount && !context.energyCount && !candidates.length) out += '<p>조회 범위에 저장된 기록이 없습니다.</p>';
+      if (context.truncated) out += '<p class="sub">기록이 많아 일부만 표시·AI에 제공했습니다. 전체 내역은 해당 메뉴에서 확인하세요.</p>';
+      return out + '</details>';
+    }
     var fetchCurrent = serverConfigured() && db.settings.lawApiOc && candidates.length
       ? Promise.all(candidates.map(function (candidate) {
           if (String(candidate.content || '').trim()) return candidate;
@@ -310,12 +320,12 @@
           });
         })) : Promise.resolve(candidates);
     fetchCurrent.then(function (current) {
-      var canAnalyze = serverConfigured() && db.settings.aiMode && db.settings.aiMode !== 'rules'
-        && current.some(function (d) { return String(d.content || '').trim(); });
-      if (!canAnalyze) { pending.innerHTML = lawCandidateAnswer(question, current); return; }
-      return I.askLaw(db.settings, question, current).then(function (response) {
-        pending.innerHTML = response.ok ? lawAiAnswer(response.result, current)
-          : lawCandidateAnswer(question, current) + '<p class="sub">AI 상세 분석 연결 실패: ' + esc(response.error || '서버 설정 확인 필요') + '</p>';
+      var canAnalyze = serverConfigured() && db.settings.aiMode && db.settings.aiMode !== 'rules';
+      var fallback = (current.length || scope === 'law' ? lawCandidateAnswer(question, current) : '') + recordsAnswer();
+      if (!canAnalyze) { pending.innerHTML = fallback; return; }
+      return I.askLaw(db.settings, question, current, context).then(function (response) {
+        pending.innerHTML = response.ok ? lawAiAnswer(response.result, current) + recordsAnswer()
+          : fallback + '<p class="sub">AI 연결 실패: ' + esc(response.error || '서버 설정 확인 필요') + '</p>';
       });
     }).catch(function (error) {
       pending.innerHTML = lawCandidateAnswer(question, candidates)
@@ -1892,8 +1902,18 @@
       var done = function (msg) { li.lastChild.textContent = msg; };
 
       if (/\.pdf$/i.test(f.name)) {
-        readPdf(f).then(function (text) {
-          if (String(text || '').replace(/\s/g, '').length >= 30) return { text: text, ocr: false };
+        var useVision = $('#energy-vision').checked;
+        if (useVision) {
+          done('사내 비전 모델로 이미지·표 확인 중…');
+          readPdfImages(f).then(function (pages) { return I.extractEnergy(db.settings, pages); }).then(function (r) {
+            if (!r.ok) throw new Error(r.error || '비전 분석 실패');
+            queueEnergyReview(r.result.rows, f.name, (r.result.warnings || []).join(' · '));
+            done('비전 분석 완료 · 추출값 검토 후 적용');
+          }).catch(function (e) { done('분석 실패: ' + e.message); });
+          return;
+        }
+        readPdf(f).catch(function () { return ''; }).then(function (text) {
+          if (E.parseUsage(text).rows.length) return { text: text, ocr: false };
           done('스캔 PDF 감지 · OCR 확인 중…');
           return I.ocr(db.settings, f).then(function (r) {
             return { text: r.ok ? r.text : text, ocr: !!r.ok, error: r.error };
@@ -1901,8 +1921,8 @@
         }).then(function (read) {
           var g = E.parseUsage(read.text);
           if (!g.rows.length && read.error) g.note = 'PDF 글자를 찾지 못했고 OCR도 사용할 수 없습니다: ' + read.error;
-          ingest(g, f.name + (read.ocr ? ' · OCR' : ''));
-          done(g.rows.length ? g.rows.length + '개월' + (read.ocr ? ' · OCR' : '') : '읽지 못함');
+          queueEnergyReview(g.candidates || g.rows, f.name + (read.ocr ? ' · OCR' : ''), g.note);
+          done(g.rows.length ? g.rows.length + '건 · 검토 후 적용' : '읽지 못함 · 사내 비전 다시 읽기 또는 붙여넣기 사용');
         }).catch(function (e) { done('오류: ' + (e && e.message || e)); });
       } else {
         readSheet(f).then(function (text) {
@@ -1924,6 +1944,73 @@
    */
   function libUrl(name) { return new URL('lib/' + name, document.baseURI).href; }
 
+  var pendingEnergyRows = [];
+  function queueEnergyReview(rows, source, note) {
+    var values = window.FacilityAssistant.reviewRows(rows);
+    values.forEach(function (r) { r.filename = source; pendingEnergyRows.push(r); });
+    var box = $('#energy-review'); box.hidden = false;
+    box.innerHTML = '<h3>추출값 검토</h3><p class="sub">' + esc(note || '연월·종류·사용량·단위를 원문과 비교해 수정하고, 적용할 행을 선택하세요. 미확인 값은 선택하지 마세요.')
+      + '</p><div class="tablewrap"><table><thead><tr><th>선택</th><th>연월</th><th>종류</th><th>사용량</th><th>단위</th><th>요금(원)</th><th>파일·페이지·근거</th><th>확인 사항</th></tr></thead><tbody>'
+      + pendingEnergyRows.map(function (r, i) {
+        return '<tr data-review-row="' + i + '" class="' + (r.warnings.length ? 'energy-uncertain' : '') + '"><td><input type="checkbox" data-field="selected" aria-label="적용 선택"></td>'
+          + '<td><input type="month" data-field="ym" value="' + esc(r.ym || '') + '" aria-label="연월"></td>'
+          + '<td><select data-field="kind" aria-label="종류">' + ['전력','수도','가스','압축공기','열','기타'].map(function (k) { return '<option' + (k === r.kind ? ' selected' : '') + '>' + k + '</option>'; }).join('') + '</select></td>'
+          + '<td><input type="number" min="0" step="any" data-field="usage" value="' + (typeof r.usage === 'number' && Number.isFinite(r.usage) ? r.usage : '') + '" aria-label="사용량"></td>'
+          + '<td><input data-field="unit" value="' + esc(r.unit || '') + '" aria-label="단위"></td>'
+          + '<td><input type="number" min="0" step="any" data-field="cost" value="' + (r.cost === null ? '' : r.cost) + '" aria-label="요금"></td>'
+          + '<td class="sub">' + esc(r.filename) + (r.page ? ' · p.' + esc(r.page) : '') + '<br>' + esc(r.source) + '</td>'
+          + '<td>' + esc(r.warnings.join(' · ') || '원문과 대조 필요') + '</td></tr>';
+      }).join('') + '</tbody></table></div><div class="btnrow"><button class="btn primary" id="energy-review-apply">선택값 적용</button><button class="btn" id="energy-review-discard">검토값 비우기</button></div><div id="energy-review-status" role="status"></div>';
+    $('#energy-review-discard').onclick = function () { pendingEnergyRows = []; box.hidden = true; };
+    $('#energy-review-apply').onclick = function () {
+      var selected = [], selectedIndexes = [], errors = [];
+      $$('[data-review-row]', box).forEach(function (row) {
+        if (!$('[data-field=selected]', row).checked) return;
+        var index = Number(row.dataset.reviewRow), r = Object.assign({}, pendingEnergyRows[index]);
+        ['ym','kind','unit'].forEach(function (k) { r[k] = $('[data-field=' + k + ']', row).value; });
+        var raw = $('[data-field=usage]', row).value.trim(); r.usage = raw === '' ? null : Number(raw);
+        var cost = $('[data-field=cost]', row).value.trim(); r.cost = cost === '' ? null : Number(cost);
+        if (r.cost !== null && (!Number.isFinite(r.cost) || r.cost < 0)) { errors.push((index + 1) + '행: 요금 확인'); return; }
+        var checked = window.FacilityAssistant.reviewRows([r])[0];
+        var hard = checked.warnings.filter(function (w) { return w !== '모델 판독 불확실' && w !== '원문 근거 확인'; });
+        if (hard.length) { errors.push((index + 1) + '행: ' + hard.join(' · ')); return; }
+        r.year = Number(r.ym.slice(0, 4)); r.month = Number(r.ym.slice(5)); r.reviewed = true;
+        r.source = r.filename + (r.page ? ' p.' + r.page : '') + ' · ' + r.source;
+        selected.push(r); selectedIndexes.push(index);
+      });
+      if (errors.length || !selected.length) { statusLine('#energy-review-status', false, errors.join(' / ') || '적용할 행을 선택하세요.'); return; }
+      var keys = {}, duplicates = false;
+      selected.forEach(function (r) { var key = r.ym + '|' + r.kind; if (keys[key]) duplicates = true; keys[key] = true; });
+      if (duplicates) { statusLine('#energy-review-status', false, '같은 연월·종류의 행이 중복됩니다. 실제 저장할 행 하나만 선택하세요.'); return; }
+      var overwrites = selected.some(function (r) { return energyRows.some(function (old) { return old.ym === r.ym && old.kind === r.kind; }); });
+      if (overwrites && !confirm('같은 연월·종류의 기존 사용량을 선택값으로 바꿉니다. 원문과 대조하셨나요?')) return;
+      ingest({ rows: selected, note: '' }, '검토 완료');
+      pendingEnergyRows = pendingEnergyRows.filter(function (_, i) { return selectedIndexes.indexOf(i) < 0; });
+      queueEnergyReview([], '', '선택값을 적용했습니다. 남은 값은 계속 검토할 수 있습니다.');
+      if (!pendingEnergyRows.length) box.hidden = true;
+    };
+  }
+
+  function readPdfImages(file) {
+    return file.arrayBuffer().then(function (buf) { return import(libUrl('pdf.min.mjs')).then(function (pdfjs) {
+      pdfjs.GlobalWorkerOptions.workerSrc = libUrl('pdf.worker.min.mjs');
+      return pdfjs.getDocument({ data: buf, cMapUrl: libUrl('cmaps/'), cMapPacked: true }).promise;
+    }); }).then(async function (doc) {
+      try {
+        if (doc.numPages > 10) throw new Error('10페이지를 넘는 PDF는 분할해서 올려주세요.');
+        var pages = [];
+        for (var i = 1; i <= doc.numPages; i++) {
+          var page = await doc.getPage(i), original = page.getViewport({ scale: 1 });
+          var viewport = page.getViewport({ scale: Math.min(2, 1800 / Math.max(original.width, original.height)) });
+          var canvas = document.createElement('canvas'); canvas.width = Math.ceil(viewport.width); canvas.height = Math.ceil(viewport.height);
+          await page.render({ canvasContext: canvas.getContext('2d'), viewport: viewport }).promise;
+          pages.push({ image: canvas.toDataURL('image/jpeg', 0.9) }); canvas.width = canvas.height = 0;
+        }
+        return pages;
+      } finally { await doc.destroy(); }
+    });
+  }
+
   function readPdf(file) {
     return file.arrayBuffer().then(function (buf) {
       return import(libUrl('pdf.min.mjs')).then(function (pdfjs) {
@@ -1943,16 +2030,7 @@
         return Promise.all(jobs).then(function (pages) {
           return pages.map(function (tc) {
             // y 좌표가 비슷한 것끼리 한 줄로 묶는다 — 안 그러면 낱말이 다 흩어진다
-            var lines = {};
-            tc.items.forEach(function (it) {
-              var y = Math.round(it.transform[5]);
-              (lines[y] = lines[y] || []).push({ x: it.transform[4], s: it.str });
-            });
-            return Object.keys(lines).sort(function (a, b) { return b - a; })
-              .map(function (y) {
-                return lines[y].sort(function (a, b) { return a.x - b.x; })
-                  .map(function (o) { return o.s; }).join(' ');
-              }).join('\n');
+            return E.pdfTextItems(tc.items);
           }).join('\n');
         });
       });
@@ -2377,7 +2455,7 @@
 
   function setFormValues(form, values) {
     $$('[name]', form).forEach(function (i) {
-      if (i.name === 'externalApiKey' || i.name === 'ocrApiKey') return;
+      if (/^(externalApiKey|ocrApiKey|internalApiKey|internalSecretKey)$/.test(i.name)) return;
       if (i.type === 'checkbox') i.checked = !!values[i.name];
       else i.value = values[i.name] == null ? '' : values[i.name];
     });
@@ -2386,7 +2464,7 @@
   function settingsFromForms() {
     var out = {};
     $$('#storage-settings [name], #ai-settings [name], #law-api-settings [name], #job-settings [name], #ocr-settings [name]').forEach(function (i) {
-      if (i.name === 'externalApiKey' || i.name === 'ocrApiKey') return;
+      if (/^(externalApiKey|ocrApiKey|internalApiKey|internalSecretKey)$/.test(i.name)) return;
       out[i.name] = i.type === 'checkbox' ? i.checked : i.value.trim();
     });
     return out;
@@ -2450,20 +2528,40 @@
           : '공유폴더를 사용할 수 없습니다: ' + r.error);
       });
     });
-    $('#settings-save').addEventListener('click', function () {
+    function applyApiSettings() {
       Object.assign(db.settings, settingsFromForms());
       var apiKey = $('#ai-settings [name=externalApiKey]').value;
       var ocrApiKey = $('#ocr-settings [name=ocrApiKey]').value;
       cacheDb();
-      I.saveSettings(db.settings, apiKey, ocrApiKey).then(function (r) {
+      return I.saveSettings(db.settings, apiKey, ocrApiKey, $('#ai-settings [name=internalApiKey]').value, $('#ai-settings [name=internalSecretKey]').value).then(function (r) {
         if (r.ok) {
           $('#ai-settings [name=externalApiKey]').value = '';
           $('#ocr-settings [name=ocrApiKey]').value = '';
+          $('#ai-settings [name=internalApiKey]').value = '';
+          $('#ai-settings [name=internalSecretKey]').value = '';
+          statusLine('#ai-status', true, '설정 적용 완료 · 키는 서버에 저장했습니다. 연결 시험으로 인증과 모델 ID를 확인하세요.');
           statusLine('#settings-status', true, '설정을 사내 서버에 저장했습니다. API 키는 서버에만 보관됩니다.');
         } else {
+          statusLine('#ai-status', false, '서버 설정 적용 실패: ' + (r.error || '사내 서버 주소와 관리자 접근 토큰을 확인하세요.'));
           statusLine('#settings-status', false, '화면 설정은 이 브라우저에 저장했지만 사내 서버에는 연결하지 못했습니다. API 키는 저장하지 않았습니다.');
         }
+        return r;
       });
+    }
+    $('#settings-save').addEventListener('click', applyApiSettings);
+    $('#ai-apply').addEventListener('click', applyApiSettings);
+    $('#ai-test').addEventListener('click', function () {
+      var button = this; button.disabled = true;
+      statusLine('#ai-status', true, '저장된 서버 설정으로 사내 AI에 연결 중…');
+      I.aiTest(db.settings).then(function (r) {
+        statusLine('#ai-status', !!(r.ok && r.connected), r.ok && r.connected ? '사내 AI 연결 성공 · ' + r.model : '연결 시험 실패: ' + (r.error || 'JSON 응답 형식을 확인하세요.'));
+      }).finally(function () { button.disabled = false; });
+    });
+    I.getSettings(db.settings).then(function (r) {
+      if (!r.ok) return;
+      Object.keys(r.settings || {}).forEach(function (k) { if (Object.prototype.hasOwnProperty.call(db.settings, k) && k !== 'serverUrl' && k !== 'serverToken') db.settings[k] = r.settings[k]; });
+      setFormValues($('#ai-settings'), db.settings); cacheDb();
+      statusLine('#ai-status', true, '서버 설정 불러옴 · API KEY ' + (r.hasInternalApiKey ? '등록됨' : '미등록') + ' · SECRET KEY ' + (r.hasInternalSecretKey ? '등록됨' : '미등록'));
     });
     $('#sync-pull').addEventListener('click', function () {
       Object.assign(db.settings, settingsFromForms()); cacheDb();

@@ -18,6 +18,16 @@
 
   var CHART_KINDS = ['전력', '수도', '가스', '압축공기'];
 
+  function pdfTextItems(items) {
+    var lines = [];
+    (items || []).slice().sort(function (a, b) { return b.transform[5] - a.transform[5] || a.transform[4] - b.transform[4]; }).forEach(function (item) {
+      var y = item.transform[5], line = lines.find(function (l) { return Math.abs(l.y - y) <= 2; });
+      if (!line) { line = { y: y, items: [] }; lines.push(line); }
+      line.items.push(item);
+    });
+    return lines.map(function (line) { return line.items.sort(function (a, b) { return a.transform[4] - b.transform[4]; }).map(function (x) { return x.str; }).join(' '); }).join('\n');
+  }
+
   /** '125,400' → 125400 · 못 읽으면 null */
   function num(s) {
     if (s == null) return null;
@@ -66,7 +76,10 @@
   }
 
   function usageFrom(text) {
+    var labeled = /(?:실제사용량|당월\s*사용량|당월사용|사용량|검침량)[^\d-]{0,16}(-?[\d,]+(?:\.\d+)?)\s*(kWh|MWh|Nm3|N㎥|m3|m³|㎥|Gcal|MJ|TOE|톤|ton|L|㎘)?/i.exec(text);
+    if (labeled) return { usage: num(labeled[1]), unit: labeled[2] || '' };
     var byUnit = new RegExp('(-?[\\d,]+(?:\\.\\d+)?)\\s*' + UNIT.source, 'i').exec(text);
+    if (byUnit && /계약전력|전년|전월|검침지침|계기지침/.test(text.slice(0, byUnit.index))) return null;
     if (byUnit) return { usage: num(byUnit[1]), unit: byUnit[2] || '' };
     var byLabel = /(?:사용량|당월사용|검침량|사용)[^\d-]{0,16}(-?[\d,]+(?:\.\d+)?)/i.exec(text);
     return byLabel ? { usage: num(byLabel[1]), unit: '' } : null;
@@ -82,6 +95,7 @@
     var fallbackYear = documentYear(sourceText);
     var byYm = {};           // 같은 달·같은 종류가 두 번 나오면 나중 것이 이긴다
     var order = [];
+    var candidates = [];
     var looked = 0, skipped = 0;
 
     lines.forEach(function (raw, lineIndex) {
@@ -117,8 +131,10 @@
         usage: found.usage,
         unit: found.unit,
         cost: cost,                 // 없으면 null — 0 이 아니다
-        source: context.slice(0, 160)
+        source: context.slice(0, 300),
+        confidence: monthOnly || !found.unit || (context.match(new RegExp('(-?[\\d,]+(?:\\.\\d+)?)\\s*' + UNIT.source, 'ig')) || []).length > 1 ? 'low' : 'high'
       };
+      candidates.push(byYm[key]);
     });
 
     var rows = order.map(function (k) { return byYm[k]; })
@@ -135,7 +151,7 @@
     } else if (skipped) {
       note = rows.length + '개월을 읽었고 ' + skipped + '줄은 건너뛰었습니다.';
     }
-    return { rows: rows, note: note, skipped: skipped };
+    return { rows: rows, candidates: candidates, note: note, skipped: skipped };
   }
 
   /** 전월 대비 증감(%) 을 붙인다. 앞 달이 없으면 null — 0% 가 아니다. */
@@ -168,7 +184,7 @@
   }
 
   return {
-    CHART_KINDS: CHART_KINDS,
+    CHART_KINDS: CHART_KINDS, pdfTextItems: pdfTextItems,
     parseUsage: parseUsage, withDelta: withDelta, groupByKind: groupByKind, num: num
   };
 });
