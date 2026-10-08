@@ -382,8 +382,8 @@ function serve(port) {
     ok(await page.isVisible('#storage-settings [name="serverToken"]')
        && await page.isVisible('#sync-pull') && await page.isVisible('#sync-push') && await page.isVisible('#sync-backup'),
        '서버 토큰과 공용 자료 불러오기·저장·백업 버튼이 있다');
-    ok(await page.locator('#ai-settings [name="aiMode"] option').count() === 4,
-       '규칙·로컬 AI·외부 API·자동 선택 모드를 제공한다');
+    ok(await page.locator('#ai-settings [name="aiMode"] option').count() === 5,
+       '규칙·사내 LLM·로컬 AI·외부 API·자동 선택 모드를 제공한다');
     ok(await page.isVisible('#ai-settings [name="externalApiKey"]')
        && await page.isVisible('#ai-settings [name="localAiUrl"]'),
        '외부 API와 로컬 AI 설정을 모두 제공한다');
