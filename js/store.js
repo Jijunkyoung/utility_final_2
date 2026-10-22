@@ -38,6 +38,7 @@
       sharedPath: '', serverUrl: '', serverToken: '', syncActor: '', deviceName: '', aiMode: 'rules',
       localAiUrl: 'http://127.0.0.1:11434', localAiModel: '',
       externalAiUrl: '', externalAiModel: '', allowExternalFallback: false,
+      upstageModel: 'solar-pro4',
       internalAiUrl: '', internalAiModel: '', internalVisionModel: '', internalAuthMode: 'bearer', internalKeyHeader: '', internalSecretHeader: '',
       lawApiUrl: 'https://www.law.go.kr/DRF', lawApiOc: '',
       ocrApiUrl: 'https://api.upstage.ai/v1/document-digitization',
@@ -72,7 +73,7 @@
       }
     });
     d.settings = Object.assign(clone(EMPTY.settings), d.settings || {});
-    ['internalApiKey', 'internalSecretKey', 'externalApiKey', 'ocrApiKey', 'smtpPassword'].forEach(function (k) { delete d.settings[k]; });
+    ['internalApiKey', 'internalSecretKey', 'externalApiKey', 'ocrApiKey', 'smtpPassword', 'upstageApiKey', 'UPSTAGE_API_KEY'].forEach(function (k) { delete d.settings[k]; });
     d.sync = Object.assign(clone(EMPTY.sync), d.sync && typeof d.sync === 'object' ? d.sync : {});
 
     var known = {};

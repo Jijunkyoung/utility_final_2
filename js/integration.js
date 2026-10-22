@@ -9,6 +9,7 @@
   function sameOriginServer() {
     return !!(root.document && root.document.querySelector('meta[name="facility-server"][content="same-origin"]'));
   }
+  function isCloud() { return !!(root.document && root.document.querySelector('meta[name="facility-cloud"][content="upstage"]')); }
   function base(settings) {
     /* 사내 서버가 화면까지 제공하면 항상 같은 출처를 쓴다. 예전에 저장한 외부 주소 때문에
        다시 외부망으로 나가거나 HTTPS→HTTP 혼합 콘텐츠가 되는 것을 막는다. */
@@ -17,7 +18,7 @@
   }
   function authHeaders(settings, source) {
     var out = Object.assign({}, source || {}), token = String(settings && settings.serverToken || '').trim();
-    if (token) out.Authorization = 'Bearer ' + token;
+    if (token && !isCloud()) out.Authorization = 'Bearer ' + token;
     return out;
   }
   function jsonHeaders(settings) { return authHeaders(settings, { 'Content-Type': 'application/json' }); }
@@ -38,7 +39,7 @@
       return res.text().then(function (body) {
         var data; try { data = body ? JSON.parse(body) : {}; } catch (e) { data = { message: body }; }
         if (!res.ok) { data.ok = false; data.status = res.status; return data; }
-        data.ok = true; return data;
+        if (data.ok !== false) data.ok = true; return data;
       });
     }).catch(function (e) {
       return { ok: false, offline: true, error: e && e.message || String(e) };
@@ -90,7 +91,7 @@
     return request(settings, '/api/analyze', { method: 'POST', headers: jsonHeaders(settings), body: JSON.stringify({
       kind: kind, equipment: equipment, text: documentText, mode: settings.aiMode,
       allowExternalFallback: !!settings.allowExternalFallback
-    }) });
+    }) }, 180000);
   }
   function saveLaw(settings, document) {
     return request(settings, '/api/laws', { method: 'POST', headers: jsonHeaders(settings), body: JSON.stringify(document) });
@@ -115,6 +116,11 @@
   function getSettings(settings) { return request(settings, '/api/settings'); }
   function extractEnergy(settings, pages) {
     return request(settings, '/api/energy/extract', { method: 'POST', headers: jsonHeaders(settings), body: JSON.stringify({ pages: pages }) }, 180000);
+  }
+  function extractEnergyFile(settings, file) {
+    return file.arrayBuffer().then(function (buf) { return request(settings, '/api/energy/document?filename=' + encodeURIComponent(file.name), {
+      method: 'POST', headers: authHeaders(settings, { 'Content-Type': file.type || 'application/pdf' }), body: buf
+    }, 180000); });
   }
   function saveAnalysis(settings, analysis) {
     return request(settings, '/api/analyses', { method: 'POST', headers: jsonHeaders(settings), body: JSON.stringify(analysis) });
@@ -153,7 +159,7 @@
         approvedAt: notification.approvedAt, approvedBy: notification.approvedBy }) }, 30000);
   }
 
-  return { health: health, saveSettings: saveSettings, testStorage: testStorage, aiTest: aiTest, getSettings: getSettings, extractEnergy: extractEnergy,
+  return { health: health, saveSettings: saveSettings, testStorage: testStorage, aiTest: aiTest, getSettings: getSettings, extractEnergy: extractEnergy, extractEnergyFile: extractEnergyFile, isCloud: isCloud,
     upload: upload, readSharedFile: readSharedFile, analyze: analyze, saveLaw: saveLaw, importLaw: importLaw, queryLaw: queryLaw, askLaw: askLaw, saveAnalysis: saveAnalysis,
     loadState: loadState, saveState: saveState, audit: audit, backup: backup, backups: backups,
     restore: restore, jobs: jobs, runJobs: runJobs, ocr: ocr,

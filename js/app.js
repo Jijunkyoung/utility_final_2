@@ -81,7 +81,7 @@
           if (r.ok) {
             db.sync = Object.assign(db.sync, { revision: r.revision, updatedAt: r.updatedAt,
               updatedBy: r.updatedBy, deviceName: r.deviceName, conflict: false, enabled: true, serverEmpty: false });
-            cacheDb(); showSyncStatus('good', '사내 공용 데이터 저장 완료 · 버전 ' + r.revision);
+            cacheDb(); showSyncStatus('good', (I.isCloud() ? '외부 데이터 저장 완료 · 버전 ' : '사내 공용 데이터 저장 완료 · 버전 ') + r.revision);
           } else if (r.conflict) {
             db.sync.conflict = true; db.sync.enabled = false; cacheDb();
             showSyncStatus('bad', '다른 PC의 수정이 먼저 저장됐습니다. 설정에서 어느 자료를 사용할지 선택하세요.');
@@ -312,7 +312,7 @@
       if (context.truncated) out += '<p class="sub">기록이 많아 일부만 표시·AI에 제공했습니다. 전체 내역은 해당 메뉴에서 확인하세요.</p>';
       return out + '</details>';
     }
-    var fetchCurrent = serverConfigured() && db.settings.lawApiOc && candidates.length
+    var fetchCurrent = serverConfigured() && (db.settings.lawApiOc || I.isCloud()) && candidates.length
       ? Promise.all(candidates.map(function (candidate) {
           if (String(candidate.content || '').trim()) return candidate;
           return I.queryLaw(db.settings, candidate.law).then(function (response) {
@@ -787,9 +787,13 @@
 
   function readDocumentText(file) {
     if (!file) return Promise.resolve('');
-    if (/\.pdf$/i.test(file.name)) return readPdf(file);
+    if (/\.pdf$/i.test(file.name)) return readPdf(file).catch(function () { return ''; }).then(function (text) {
+      if (!I.isCloud() || String(text).replace(/\s/g, '').length >= 30) return text;
+      return I.ocr(db.settings, file).then(function (r) { if (!r.ok) throw new Error(r.error); return r.text; });
+    });
     if (/\.(xlsx?|csv)$/i.test(file.name)) return readSheet(file);
     if (/\.(txt|md|json|xml)$/i.test(file.name) || /^text\//.test(file.type || '')) return file.text();
+    if (I.isCloud() && /\.(docx?|hwpx?|png|jpe?g|webp)$/i.test(file.name)) return I.ocr(db.settings, file).then(function (r) { if (!r.ok) throw new Error(r.error); return r.text; });
     return Promise.resolve('');
   }
 
@@ -809,7 +813,7 @@
      * 파일 저장과 본문 분석은 독립적으로 끝나며, 각각 끝나는 즉시 화면을 갱신한다. */
     I.upload(db.settings, e.id, '매뉴얼', file).then(function (upload) {
       var manual = currentManual();
-      manual.storageStatus = upload.ok ? '공유폴더 저장 완료' : '브라우저 임시 저장';
+      manual.storageStatus = upload.ok ? (I.isCloud() ? '외부 파일 저장 완료' : '공유폴더 저장 완료') : '브라우저 임시 저장';
       if (upload.ok) { manual.storagePath = upload.path; manual.filePath = upload.path; }
       persist();
       if (detailEquipment() && detailEquipment().id === e.id) renderDetailManuals(e);
@@ -824,6 +828,7 @@
         if (!documentText || db.settings.aiMode === 'rules') return { result: fallback };
         return I.analyze(db.settings, 'manual', e, documentText).then(function (ai) {
           var parsed = ai.ok && A.normalizeAi('manual', ai.result);
+          if (!parsed && ai.error) fallback.warnings.push(ai.error);
           return { result: parsed || fallback, provider: parsed ? ai.provider : 'rules' };
         });
       }).then(function (done) {
@@ -874,6 +879,7 @@
       var meta = [m.version, m.fileName, formatBytes(m.fileSize), m.storageStatus, m.note].filter(Boolean).join(' · ');
       return '<li><div><b>' + esc(m.title) + '</b><div class="meta">' + esc(path) + '</div>'
         + (meta ? '<div class="meta">' + esc(meta) + '</div>' : '') + '</div><div class="btnrow" style="margin:0">'
+        + (I.isCloud() && /^cloud-files\//.test(path) ? '<a class="btn small-btn" href="/api/files/download?path=' + encodeURIComponent(path) + '">파일 다운로드</a>' : '')
         + '<button class="btn small-btn" data-copy-path="' + esc(path) + '">경로 복사</button>'
         + (m.legacy ? '' : '<button class="btn small-btn" data-manual-del="' + esc(m.id) + '">삭제</button>')
         + '</div></li>';
@@ -1904,8 +1910,8 @@
       if (/\.pdf$/i.test(f.name)) {
         var useVision = $('#energy-vision').checked;
         if (useVision) {
-          done('사내 비전 모델로 이미지·표 확인 중…');
-          readPdfImages(f).then(function (pages) { return I.extractEnergy(db.settings, pages); }).then(function (r) {
+          done(I.isCloud() ? 'Upstage로 PDF 원문·표 판독 중…' : '사내 비전 모델로 이미지·표 확인 중…');
+          (I.isCloud() ? I.extractEnergyFile(db.settings, f) : readPdfImages(f).then(function (pages) { return I.extractEnergy(db.settings, pages); })).then(function (r) {
             if (!r.ok) throw new Error(r.error || '비전 분석 실패');
             queueEnergyReview(r.result.rows, f.name, (r.result.warnings || []).join(' · '));
             done('비전 분석 완료 · 추출값 검토 후 적용');
@@ -2492,6 +2498,29 @@
   }
 
   function initSettings() {
+    if (I.isCloud()) {
+      var mode = $('#ai-settings [name=aiMode]');
+      mode.add(new Option('Upstage Solar', 'upstage'));
+      $('#cloud-model-setting').hidden = false;
+      ['aiMode','localAiUrl','localAiModel','internalAiUrl','internalAiModel','internalVisionModel','internalAuthMode','internalKeyHeader','internalSecretHeader','internalApiKey','internalSecretKey','externalAiUrl','externalAiModel','externalApiKey','allowExternalFallback'].forEach(function (k) {
+        var el = $('#ai-settings [name=' + k + ']'); if (el) { el.closest('label').hidden = true; el.disabled = true; }
+      });
+      $$('#ocr-settings label').forEach(function (el) { el.hidden = true; });
+      var aiCard = $('#ai-settings').closest('section');
+      $('h2', aiCard).textContent = 'Upstage AI';
+      $('p.sub', aiCard).textContent = '매뉴얼 요약·법령 질의·사양 검토는 Solar, PDF 정밀판독은 Document Parse와 Solar를 함께 사용합니다.';
+      $('.security-note', aiCard).textContent = 'API 키는 사이트 런타임 비밀값 UPSTAGE_API_KEY로 등록합니다. 키가 없으면 원문 저장과 규칙 기반 조회만 작동합니다.';
+      $('details', aiCard).hidden = true;
+      $('#ai-test').textContent = 'Upstage 연결 시험';
+      var ocrCard = $('#ocr-settings').closest('section'); $('p.sub', ocrCard).textContent = 'Upstage Document Parse가 이미지·표·스캔 PDF를 읽습니다. Solar와 같은 서버 키를 사용하며 추출값은 검토 후 적용합니다.';
+      $('.security-note', ocrCard).textContent = '키 등록 후에도 문서 파싱 사용 권한·한도를 확인해야 합니다.';
+      var storageCard = $('#storage-settings').closest('section'); $('h2', storageCard).textContent = '외부 저장소';
+      $$('p.sub', storageCard).forEach(function (el) { el.textContent = '현재 로그인 계정으로 외부 데이터베이스와 파일 저장소에 연결합니다. 사내 주소·접근 토큰은 필요하지 않습니다.'; });
+      ['serverUrl','sharedPath','serverToken'].forEach(function (k) { $('#storage-settings [name=' + k + ']').closest('label').hidden = true; });
+      $('.intranet-card').hidden = true;
+      $('#storage-save').textContent = '기기 정보 저장'; $('#storage-test').textContent = '파일 저장 시험';
+      $('#job-settings').previousElementSibling.textContent = '지금 점검 실행으로 검사·교체 알림을 생성합니다. 법령 점검에는 OC 등록이 필요하며, 정기 실행 일정과 실제 메일 발송은 별도 설정입니다.';
+    }
     setFormValues($('#storage-settings'), db.settings);
     setFormValues($('#ai-settings'), db.settings);
     setFormValues($('#law-api-settings'), db.settings);
@@ -2516,7 +2545,7 @@
       I.health(db.settings).then(function (r) {
         statusLine('#storage-status', r.ok, r.ok ? '사내 서버 연결에 성공했습니다. 현재 권한: '
           + ({ admin: '관리자', editor: '편집자', viewer: '읽기 전용' }[r.role] || r.role || '확인 불가')
-          + (r.network && r.network.scope === 'intranet' ? ' · 사내망 공개 모드' : ' · 이 PC 전용 모드')
+          + (r.cloud ? ' · 외부 서버' : r.network && r.network.scope === 'intranet' ? ' · 사내망 공개 모드' : ' · 이 PC 전용 모드')
           : '연결하지 못했습니다: ' + r.error);
       });
     });
@@ -2539,8 +2568,8 @@
           $('#ocr-settings [name=ocrApiKey]').value = '';
           $('#ai-settings [name=internalApiKey]').value = '';
           $('#ai-settings [name=internalSecretKey]').value = '';
-          statusLine('#ai-status', true, '설정 적용 완료 · 키는 서버에 저장했습니다. 연결 시험으로 인증과 모델 ID를 확인하세요.');
-          statusLine('#settings-status', true, '설정을 사내 서버에 저장했습니다. API 키는 서버에만 보관됩니다.');
+          statusLine('#ai-status', true, I.isCloud() ? '설정 적용 완료 · Upstage 연결 시험으로 등록된 키와 사용 권한을 확인하세요.' : '설정 적용 완료 · 키는 서버에 저장했습니다. 연결 시험으로 인증과 모델 ID를 확인하세요.');
+          statusLine('#settings-status', true, I.isCloud() ? '외부 서버에 설정을 저장했습니다.' : '설정을 사내 서버에 저장했습니다. API 키는 서버에만 보관됩니다.');
         } else {
           statusLine('#ai-status', false, '서버 설정 적용 실패: ' + (r.error || '사내 서버 주소와 관리자 접근 토큰을 확인하세요.'));
           statusLine('#settings-status', false, '화면 설정은 이 브라우저에 저장했지만 사내 서버에는 연결하지 못했습니다. API 키는 저장하지 않았습니다.');
@@ -2554,14 +2583,14 @@
       var button = this; button.disabled = true;
       statusLine('#ai-status', true, '저장된 서버 설정으로 사내 AI에 연결 중…');
       I.aiTest(db.settings).then(function (r) {
-        statusLine('#ai-status', !!(r.ok && r.connected), r.ok && r.connected ? '사내 AI 연결 성공 · ' + r.model : '연결 시험 실패: ' + (r.error || 'JSON 응답 형식을 확인하세요.'));
+        statusLine('#ai-status', !!(r.ok && r.connected), r.ok && r.connected ? (I.isCloud() ? 'Upstage 연결 성공 · ' : '사내 AI 연결 성공 · ') + r.model : '연결 시험 실패: ' + (r.error || 'JSON 응답 형식을 확인하세요.'));
       }).finally(function () { button.disabled = false; });
     });
     I.getSettings(db.settings).then(function (r) {
       if (!r.ok) return;
       Object.keys(r.settings || {}).forEach(function (k) { if (Object.prototype.hasOwnProperty.call(db.settings, k) && k !== 'serverUrl' && k !== 'serverToken') db.settings[k] = r.settings[k]; });
       setFormValues($('#ai-settings'), db.settings); cacheDb();
-      statusLine('#ai-status', true, '서버 설정 불러옴 · API KEY ' + (r.hasInternalApiKey ? '등록됨' : '미등록') + ' · SECRET KEY ' + (r.hasInternalSecretKey ? '등록됨' : '미등록'));
+      statusLine('#ai-status', I.isCloud() ? r.hasUpstageApiKey : true, I.isCloud() ? 'Upstage API 키 ' + (r.hasUpstageApiKey ? '등록됨 · 연결 시험 필요' : '미등록 · 런타임 비밀값 UPSTAGE_API_KEY 등록 필요') : '서버 설정 불러옴 · API KEY ' + (r.hasInternalApiKey ? '등록됨' : '미등록') + ' · SECRET KEY ' + (r.hasInternalSecretKey ? '등록됨' : '미등록'));
     });
     $('#sync-pull').addEventListener('click', function () {
       Object.assign(db.settings, settingsFromForms()); cacheDb();
@@ -2619,6 +2648,9 @@
       statusLine('#backup-status', true, '백업을 복원하고 있습니다.');
       I.restore(db.settings, name).then(function (r) {
         statusLine('#backup-status', r.ok, r.ok ? '복원 완료. 복원 직전 안전 백업: ' + r.safetyBackup : (r.error || '복원하지 못했습니다.'));
+        if (r.ok && I.isCloud()) I.loadState(db.settings).then(function (state) {
+          if (state.ok && state.data) { db = St.applyShared(db, state.data, { revision: state.revision, updatedAt: state.updatedAt, updatedBy: state.updatedBy, deviceName: state.deviceName, enabled: true }); cacheDb(); renderSyncSummary(); }
+        });
       });
     });
     function runJob(forceLaws) {
@@ -2629,6 +2661,9 @@
           var message = r.ok ? '알림 ' + r.queued + '건 추가 · 법령 ' + r.lawChecked + '건 확인 · 변경 ' + r.lawChanged + '건'
             : '일부 항목을 처리하지 못했습니다: ' + ((r.errors || []).join(' / ') || r.error || '확인 필요');
           statusLine('#job-status', !!r.ok, message); loadJobs();
+          if (I.isCloud()) I.loadState(db.settings).then(function (state) {
+            if (state.ok && state.data) { db = St.applyShared(db, state.data, { revision: state.revision, updatedAt: state.updatedAt, updatedBy: state.updatedBy, deviceName: state.deviceName, enabled: true }); cacheDb(); renderSyncSummary(); }
+          });
         });
       });
     }
@@ -2947,7 +2982,17 @@
 
   document.addEventListener('DOMContentLoaded', function () {
     if (!serverConfigured()) { initCurrentPage(); return; }
-    I.loadState(db.settings).then(function (r) {
+    var ready = I.isCloud() ? I.getSettings(db.settings).then(function (r) {
+      if (r.ok) { Object.assign(db.settings, r.settings); cacheDb(); }
+      else { db.settings.aiMode = 'upstage'; }
+      var banner = document.createElement('div'); banner.className = 'note';
+      banner.id = 'cloud-service-status'; banner.textContent = r.ok && r.hasUpstageApiKey
+        ? '외부 서버 · Upstage 키 등록됨. AI 연결 시험에서 인증과 사용 권한을 확인하세요.'
+        : '외부 서버 · Upstage API 키 미등록. 설비·사용량 저장은 가능하며, AI 분석은 키 등록 후 사용할 수 있습니다.';
+      var main = $('main .wrap') || $('main'); if (main) main.prepend(banner);
+      var vision = $('#energy-vision'); if (vision) vision.parentElement.lastChild.textContent = ' Upstage로 PDF 정밀판독';
+    }) : Promise.resolve();
+    ready.then(function () { return I.loadState(db.settings); }).then(function (r) {
       if (r.ok && r.data) {
         db = St.applyShared(db, r.data, { revision: r.revision, updatedAt: r.updatedAt,
           updatedBy: r.updatedBy, deviceName: r.deviceName, enabled: true, serverEmpty: false });
@@ -2958,7 +3003,7 @@
         cacheDb();
       }
       initCurrentPage();
-      if (r.ok && r.data) showSyncStatus('good', '사내 공용 데이터 연결 · 버전 ' + r.revision);
+      if (r.ok && r.data) showSyncStatus('good', (I.isCloud() ? '외부 데이터 연결 · 버전 ' : '사내 공용 데이터 연결 · 버전 ') + r.revision);
       else if (r.ok && hasSharedData()) showSyncStatus('bad', '공용 DB가 비어 있습니다. 설정에서 이 PC 자료를 올릴지 선택하세요.');
       else if (!r.ok) showSyncStatus('bad', '사내 공용 서버에 연결하지 못해 이 PC 자료로 열었습니다.');
     });

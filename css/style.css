@@ -356,6 +356,7 @@ input[type=color]{width:44px;height:36px;padding:3px;border:1px solid #bdcbd7;bo
 }
 
 /* 사내 AI와 고지서 검토 */
+[hidden] { display: none !important; }
 #energy-review { margin-top: 20px; padding: 18px; border: 1px solid var(--line, #d6e1e8); border-radius: 12px; }
 #energy-review input[type=number] { min-width: 120px; }
 #energy-review input[data-field=unit] { width: 95px; }
