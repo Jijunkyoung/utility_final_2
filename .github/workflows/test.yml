@@ -32,6 +32,7 @@ jobs:
       - name: 단위 테스트 (날짜 · 법령 · 에너지 파싱)
         run: |
           node test/logic.test.js
+          node --test test/cloud.test.mjs
           python3 test/jobs.test.py
           python3 test/server.test.py
 

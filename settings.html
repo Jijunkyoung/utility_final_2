@@ -123,6 +123,7 @@
     <h2>AI 분석 방식</h2>
     <p class="sub">법령·매뉴얼은 규칙 분석을 기본으로 하며, 허용된 환경에서는 로컬 AI 또는 외부 API를 선택할 수 있습니다.</p>
     <form id="ai-settings" class="grid-form settings-form">
+      <label id="cloud-model-setting" hidden>Upstage 모델 <select name="upstageModel"><option value="solar-pro4">Solar Pro 4</option><option value="solar-mini4">Solar Mini 4</option></select></label>
       <label>분석 모드 <select name="aiMode"><option value="rules">규칙 기반만</option><option value="internal">사내 LLM API</option><option value="local">로컬 AI (Ollama)</option><option value="external">외부 API</option><option value="auto">로컬 우선 자동 선택</option></select></label>
       <label>사내 API 주소 <input name="internalAiUrl" placeholder="회사 안내의 기본 주소 또는 /v1/chat/completions"></label>
       <label>텍스트 모델 ID <input name="internalAiModel" placeholder="qwen3-8-27b · 회사 표기 그대로 입력"></label>

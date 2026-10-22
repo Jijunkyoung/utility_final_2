@@ -210,3 +210,13 @@ PDF 추출값은 검토 목록에 표시하며 곧바로 저장하지 않습니�
 ## 회사 VM에 업데이트 반영
 
 chatgpt.site와 회사 VM은 별도 복사본입니다. GitHub 최신 main ZIP을 VM으로 전송한 뒤, 업데이트 스크립트로 앱 파일만 반영합니다. `server/config.local.json`과 기존 데이터는 복사 대상에서 제외하며 이전 앱 파일을 백업합니다. 실행 중인 서버는 업데이트 후 재시작해야 새 API가 동작합니다. 상세 절차는 `server/update_from_zip.py --help`에서 확인합니다.
+
+## 외부 서버와 Upstage
+
+외부 전체 기능은 기존 Facility AI 사이트에서 사용합니다. Sites 배포는 Vinext Worker, D1 데이터베이스와 R2 파일 저장소를 사용합니다. 사내 Python 서버와 GitHub Pages의 브라우저 저장 방식도 유지하며, 회사 VM의 기존 설정·DB는 바꾸지 않습니다. 외부 화면에는 서버에서 same-origin/Upstage 표식을 넣어 사내 주소와 접근 토큰 없이 연결합니다. 기존 기기의 임시 자료는 자동 덮어쓰지 않으며 설정에서 확인 후 서버로 올릴 수 있습니다.
+
+서버 비밀값 `UPSTAGE_API_KEY`를 Sites 런타임 환경변수에 비밀값으로 등록하세요. 다른 저장소나 다른 사이트의 키는 자동 공유되지 않습니다. 선택 모델은 `solar-pro4`(기본) 또는 `solar-mini4`이며, 매뉴얼 요약·교체/검사주기 추출·법령 검토·통합 질문에 사용합니다. PDF 정밀판독은 Upstage Document Parse로 원문·표를 읽은 뒤 Solar로 연월·종류·사용량·단위·요금·원문 근거를 추출합니다. 키 미등록·인증 실패·한도 오류를 구분해 표시하며 AI 결과를 자동으로 확정하거나 숫자를 0으로 대체하지 않습니다.
+
+키는 브라우저 코드, 공용 데이터, 설정 API 응답에 넣지 않습니다. 환경변수는 Sites 관리 도구로 등록하고 기존 소유자 전용 접근 정책을 유지합니다. 키가 등록되기 전에는 저장·조회·차트·엑셀·백업 등은 사용할 수 있지만 Upstage 실호출은 불가능합니다. 최신 법령 자동 조회에는 `LAW_API_OC` 비밀값 또는 설정의 OC 값이 추가로 필요하며, 미등록 시 저장된 법령 원문과 국가법령정보센터 검색 링크를 사용할 수 있습니다. 알림 대기함 생성과 수동 점검은 지원합니다. 정기 실행 일정과 실제 메일 발송 서비스는 별도 등록 전까지 활성화하지 않습니다.
+
+개발: `npm run install:ci` → `npm run db:generate`(스키마 변경 시만) → `npm run build`. `public/`과 `cloud/static-index.ts`는 원본 HTML·JS·CSS에서 자동 생성합니다. 사내/정적 버전은 `npm run build:static`으로 생성합니다. 외부 서버 검사는 `node --test test/cloud.test.mjs`, 기존 규칙 검사는 `node test/logic.test.js`입니다. 배포 전 D1 SQL 마이그레이션을 포함한 Sites 소스/아카이브 워크플로를 사용하세요.
