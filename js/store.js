@@ -43,7 +43,7 @@
       lawApiUrl: 'https://www.law.go.kr/DRF', lawApiOc: '',
       ocrApiUrl: 'https://api.upstage.ai/v1/document-digitization',
       inspectionLeadDays: 30, replacementLeadDays: 30, lawCheckEveryDays: 7,
-      costInflation: 3, costContingency: 5, mapImageData: '',
+      costInflation: 3, costContingency: 5, mapImageData: '', mapImagePath: '',
       mapStrokeColor: '#154b6e', mapStrokeWidth: 2
     },
     sync: { revision: 0, updatedAt: null, updatedBy: '', deviceName: '', conflict: false,

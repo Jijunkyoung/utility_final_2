@@ -2171,6 +2171,17 @@
         if (cacheDb()) {
           renderCampus();
           statusLine('#campus-image-status', true, (source || file.name || '조감도 이미지') + '를 적용했습니다.');
+          if (I.isCloud()) canvas.toBlob(function (blob) {
+            I.upload(db.settings, 'campus', '조감도', new File([blob], 'campus-background.jpg', { type: 'image/jpeg' })).then(function (upload) {
+              if (!upload.ok) throw new Error(upload.error);
+              db.settings.mapImagePath = upload.path;
+              return I.saveSettings(db.settings).then(function (saved) {
+                if (!saved.ok) throw new Error(saved.error);
+                db.settings.mapImageData = '/api/files/image?path=' + encodeURIComponent(upload.path); cacheDb(); renderCampus();
+                statusLine('#campus-image-status', true, '조감도를 외부 서버에 저장했습니다. 다른 기기에서도 같은 배경을 불러옵니다.');
+              });
+            }).catch(function (error) { statusLine('#campus-image-status', false, '이 기기에는 적용했지만 외부 저장 실패: ' + error.message); });
+          }, 'image/jpeg', 0.82);
         }
       };
       img.src = reader.result;
@@ -2272,6 +2283,7 @@
     $('#campus-image-clear').addEventListener('click', function () {
       db.settings.mapImageData = ''; cacheDb(); renderCampus();
       statusLine('#campus-image-status', true, '배경 이미지를 제거했습니다.');
+      if (I.isCloud()) { db.settings.mapImagePath = ''; I.saveSettings(db.settings).then(function (r) { if (!r.ok) statusLine('#campus-image-status', false, '외부 서버에서 배경 설정을 지우지 못했습니다: ' + r.error); }); }
     });
     $('#building-draw-start').addEventListener('click', function () { startBuildingDrawing(null); });
     $('#building-draw-undo').addEventListener('click', function () {

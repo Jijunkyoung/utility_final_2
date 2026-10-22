@@ -1,6 +1,6 @@
 // Hosted behind the existing owner-only Sites access policy. Keys live in runtime secrets.
 const SHARED = ['equipments','history','consumables','manuals','lawReviews','lawDocuments','lawVersions','lawChanges','analysisResults','energy','buildings','managers','notificationQueue'];
-const SETTINGS = ['upstageModel','lawApiOc','inspectionLeadDays','replacementLeadDays','lawCheckEveryDays'];
+const SETTINGS = ['upstageModel','lawApiOc','inspectionLeadDays','replacementLeadDays','lawCheckEveryDays','mapImagePath'];
 const MODELS = ['solar-pro4','solar-mini4'];
 const now = () => new Date().toISOString();
 const uid = () => crypto.randomUUID();
@@ -16,7 +16,7 @@ async function config(env) { const row=await env.DB.prepare('SELECT payload FROM
 function settingsView(cfg,env) {
   return { ...cfg, aiMode:'upstage', externalAiUrl:'https://api.upstage.ai/v1/chat/completions', externalAiModel:cfg.upstageModel,
     ocrApiUrl:'https://api.upstage.ai/v1/document-digitization',sharedPath:'cloud-files/',lawApiUrl:'https://www.law.go.kr/DRF',
-    hasUpstageApiKey:!!env.UPSTAGE_API_KEY?.trim(),cloud:true };
+    hasUpstageApiKey:!!env.UPSTAGE_API_KEY?.trim(),cloud:true,...(cfg.mapImagePath!==undefined?{mapImageData:cfg.mapImagePath?'/api/files/image?path='+encodeURIComponent(cfg.mapImagePath):''}:{}) };
 }
 async function snapshot(env) { const r=await env.DB.prepare('SELECT * FROM cloud_state WHERE id=1').first(); return r?{revision:r.revision,data:clean(JSON.parse(r.payload)),updatedAt:r.updated_at,updatedBy:r.actor,deviceName:r.device}:{revision:0,data:null,updatedAt:null,updatedBy:'',deviceName:''}; }
 async function record(env,category,payload,id=uid()) { await env.DB.prepare('INSERT INTO cloud_records(id,category,payload,created_at) VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload,created_at=excluded.created_at').bind(id,category,JSON.stringify(payload),now()).run(); return id; }
@@ -96,11 +96,13 @@ export async function handleApi(request,env,services={}) {
       if(path==='/api/jobs')return json({ok:true,items:await records(env,'job')});
       if(path==='/api/laws')return json({ok:true,documents:(await records(env,'law',200)).filter(x=>x.equipmentId===url.searchParams.get('equipmentId'))});
       if(path==='/api/files/download')return await download(env,url.searchParams.get('path'));
+      if(path==='/api/files/image')return await download(env,url.searchParams.get('path'),true);
     } else {
       if(path==='/api/settings') {
         const d=await input(request);if(['upstageApiKey','externalApiKey','ocrApiKey','internalApiKey','internalSecretKey'].some(k=>d[k]))fail('외부 사이트의 키는 런타임 비밀값 UPSTAGE_API_KEY로 등록합니다. 브라우저나 데이터베이스에 저장하지 않았습니다.');
         const c={...cfg}; for(const k of SETTINGS)if(d[k]!==undefined)c[k]=d[k];
         if(!MODELS.includes(c.upstageModel))fail('Solar Pro 4 또는 Solar Mini 4를 선택하세요.');
+        if(c.mapImagePath&&(!/^cloud-files\/[a-f0-9-]+\/[\w.-]+\.(?:png|jpe?g|webp)$/i.test(c.mapImagePath)||c.mapImagePath.includes('..')))fail('업로드한 조감도 이미지 경로만 저장할 수 있습니다.');
         for(const k of ['inspectionLeadDays','replacementLeadDays','lawCheckEveryDays'])if(!Number.isFinite(Number(c[k]))||Number(c[k])<1||Number(c[k])>365)fail('점검 설정은 1~365 범위로 입력하세요.');
         await env.DB.prepare('INSERT INTO cloud_settings(id,payload) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload').bind(JSON.stringify(c)).run();return json({ok:true,saved:true,hasUpstageApiKey:!!env.UPSTAGE_API_KEY?.trim()});
       }
@@ -135,10 +137,12 @@ async function upload(request,env,url) {
   await record(env,'file',{path,filename:name,equipmentId:url.searchParams.get('equipmentId'),category:url.searchParams.get('category'),size:bytes.byteLength});
   return json({ok:true,path,size:bytes.byteLength,downloadUrl:'/api/files/download?path='+encodeURIComponent(path)});
 }
-async function download(env,path) {
+async function download(env,path,inline=false) {
   if(typeof path!=='string'||!path.startsWith('cloud-files/')||path.split('/').some(x=>x==='..'||x==='.')||path.includes('\\'))fail('외부 저장소에 업로드한 파일 경로만 열 수 있습니다.');
   const r=await env.BUCKET.get(path);if(!r)fail('파일을 찾지 못했습니다.',404);
-  return new Response(r.body,{headers:{'Content-Type':r.httpMetadata?.contentType||'application/octet-stream','Content-Disposition':"attachment; filename*=UTF-8''"+encodeURIComponent(path.split('/').pop()),'X-Facility-Filename':encodeURIComponent(path.split('/').pop()),'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});
+  if(inline&&!/\.(png|jpe?g|webp)$/i.test(path))fail('이미지만 표시할 수 있습니다.');
+  const imageType=/\.png$/i.test(path)?'image/png':/\.webp$/i.test(path)?'image/webp':'image/jpeg';
+  return new Response(r.body,{headers:{'Content-Type':inline?imageType:r.httpMetadata?.contentType||'application/octet-stream','Content-Disposition':(inline?'inline':'attachment')+"; filename*=UTF-8''"+encodeURIComponent(path.split('/').pop()),'X-Facility-Filename':encodeURIComponent(path.split('/').pop()),'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});
 }
 async function runJobs(env,cfg,payload,fetcher) {
   const before=await snapshot(env), data=clean(before.data), started=now(), errors=[];let queued=0,lawChecked=0,lawChanged=0;

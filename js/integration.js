@@ -54,6 +54,7 @@
     if (internalApiKey) payload.internalApiKey = internalApiKey;
     if (internalSecretKey) payload.internalSecretKey = internalSecretKey;
     delete payload.serverToken;
+    if (isCloud()) delete payload.mapImageData;
     return request(settings, '/api/settings', { method: 'POST', headers: jsonHeaders(settings), body: JSON.stringify(payload) });
   }
   function testStorage(settings) {

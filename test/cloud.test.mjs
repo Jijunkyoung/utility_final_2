@@ -48,6 +48,13 @@ test('uploaded documents can be read back, and local paths are refused',async()=
 test('foreign-origin mutations are rejected',async()=>{
   const r=await handleApi(new Request('https://facility.test/api/state',{method:'POST',headers:{Origin:'https://other.test'},body:'{}'}),environment());assert.equal(r.status,403);
 });
+test('campus background is stored in R2 and shared through server settings',async()=>{
+  const env=environment();const r=await handleApi(new Request('https://facility.test/api/files?filename=campus-background.jpg',{method:'POST',headers:{'Content-Type':'image/jpeg'},body:'sample-image'}),env);const file=await r.json();
+  const saved=await call(env,'/api/settings',{mapImagePath:file.path});assert.equal(saved.value.ok,true);
+  const config=await call(env,'/api/settings');assert.ok(config.value.settings.mapImageData.startsWith('/api/files/image?path='));
+  const image=await handleApi(new Request('https://facility.test'+config.value.settings.mapImageData),env);assert.equal(image.headers.get('content-type'),'image/jpeg');assert.equal(await image.text(),'sample-image');
+  await call(env,'/api/settings',{mapImagePath:''});assert.equal((await call(env,'/api/settings')).value.settings.mapImageData,'');
+});
 test('inspection job is repeatable and does not send mail',async()=>{
   const env=environment();await call(env,'/api/state',{data:{equipments:[{id:'E1',name:'공기압축기',inspections:[{id:'I1',lastDate:'2020-01-31',cycleMonths:12,name:'검사'}]}]}});
   const first=await call(env,'/api/jobs/run',{});assert.equal(first.value.queued,1);const second=await call(env,'/api/jobs/run',{});assert.equal(second.value.queued,0);
